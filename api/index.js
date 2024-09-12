@@ -1,8 +1,7 @@
 const express = require('express');
-const bodyParser = require('body-parser');
 const { NeynarAPIClient } = require('@neynar/nodejs-sdk');
 const OpenAI = require('openai');
-const { getOpenAIThreadId, saveOpenAIThreadId } = require('./threadUtils');
+const { getOpenAIThreadId, saveOpenAIThreadId } = require('../threadUtils');
 const TinyURL = require('tinyurl');
 const axios = require('axios'); 
 require('dotenv').config();
@@ -18,8 +17,6 @@ const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY, organization: pr
 
 const app = express();
 const PORT = 3000;
-
-app.use(bodyParser.json());
 
 // Utility function to create a new thread
 async function createNewThread(name, channelId) {
@@ -77,7 +74,8 @@ async function runThread(threadId) {
 }
 
 // Endpoint to receive the webhook
-app.post('/webhook', async (req, res) => {
+// app.post('/webhook', async (req, res) => {
+module.exports = async (req, res) => {
   try {
     // Print all details of the webhook to understand its structure
     console.log('Received webhook data:', JSON.stringify(req.body, null, 2));
@@ -177,7 +175,7 @@ app.post('/webhook', async (req, res) => {
     console.error('Error processing webhook:', error);
     res.status(500).send('Server error');
   }
-});
+};
 
 async function generateImage(threadId, castText) {
   try {
