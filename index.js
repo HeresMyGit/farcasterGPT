@@ -5,6 +5,8 @@ const OpenAI = require('openai');
 const { getOpenAIThreadId, saveOpenAIThreadId } = require('./threadUtils');
 const TinyURL = require('tinyurl');
 const axios = require('axios'); 
+const fetch = require('node-fetch'); // Import node-fetch for making API requests
+
 require('dotenv').config();
 
 // Initialize Neynar client
@@ -76,6 +78,57 @@ async function runThread(threadId) {
   }
 }
 
+// Utility function to fetch all messages in a Farcaster thread
+async function fetchFarcasterThreadMessages(castHash) {
+  const url = `https://api.neynar.com/v2/farcaster/cast/conversation?identifier=${castHash}&type=hash&reply_depth=2&include_chronological_parent_casts=false&limit=20`;
+  const options = {
+    method: 'GET',
+    headers: {
+      accept: 'application/json',
+      api_key: process.env.NEYNAR_API_KEY, // Use the API key from environment variables
+    },
+  };
+
+  try {
+    const response = await fetch(url, options);
+    if (!response.ok) {
+      throw new Error(`Failed to fetch thread messages: ${response.statusText}`);
+    }
+
+    const data = await response.json();
+
+    // Extract the main cast and direct replies
+    const mainCast = data.conversation.cast;
+    const directReplies = mainCast.direct_replies || [];
+
+    // Combine the main cast and all direct replies into a single array
+    const allMessages = [mainCast, ...directReplies];
+
+    // Recursively gather messages from nested direct replies
+    const gatherMessages = (replies) => {
+      return replies.flatMap(reply => {
+        const nestedReplies = reply.direct_replies || [];
+        return [reply, ...gatherMessages(nestedReplies)];
+      });
+    };
+
+    // Get all nested messages
+    const nestedMessages = gatherMessages(directReplies);
+
+    // Combine main cast messages and nested messages
+    const combinedMessages = [mainCast, ...nestedMessages];
+
+    // Combine messages into a single context string
+    const context = combinedMessages.map(msg => `${msg.author.display_name}: ${msg.text}`).join('\n');
+    console.log(`Fetched ${combinedMessages.length} messages from Farcaster thread with hash: ${castHash}`);
+    
+    return context;
+  } catch (error) {
+    console.error('Error fetching thread messages:', error.message);
+    return '';
+  }
+}
+
 // Endpoint to receive the webhook
 app.post('/webhook', async (req, res) => {
   try {
@@ -97,6 +150,9 @@ app.post('/webhook', async (req, res) => {
     // Add the message hash to the cache to avoid duplicate replies
     repliedMessageHashes.add(messageHash);
 
+    const conversationContext = await fetchFarcasterThreadMessages(farcasterThreadId);
+
+
     // Check if there's already an OpenAI thread associated with this Farcaster thread
     let threadId = getOpenAIThreadId(farcasterThreadId);
 
@@ -111,7 +167,8 @@ app.post('/webhook', async (req, res) => {
     }
 
     // Step 2: Add the initial user message to the thread
-    await createMessage(threadId, castText);
+    // await createMessage(threadId, castText);
+    await createMessage(threadId, `Farcaster thread history: ${conversationContext}\n\n------\n\nLatest cast from ${hookData.data.author.username}: ${castText}`);
 
     // Step 3: Run the Assistant on the thread
     const shouldRun = true; // Replace with your logic if needed
@@ -121,7 +178,11 @@ app.post('/webhook', async (req, res) => {
     // Check if the message includes #generateimage
     if (castText.includes('#generateimage')) {
       imageUrl = await generateImage(threadId, castText);
-      botMessage = "heres ur image mfer"
+      if (imageUrl) {
+        botMessage = "heres ur image mfer"
+      } else {
+        botMessage = 'no luck, try again'
+      }
     } else {
       if (shouldRun) {
       const run = await runThread(threadId);
