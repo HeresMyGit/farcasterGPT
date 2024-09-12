@@ -60,22 +60,38 @@ async function createMessage(threadId, userMessage) {
   }
 }
 
-// Utility function to run the Assistant on a thread
+// Utility function to run the Assistant on a thread with retry logic
 async function runThread(threadId) {
-  try {
-    console.warn(`Running assistant on thread: ${threadId}`);
-    const run = await openai.beta.threads.runs.createAndPoll(threadId, {
-      assistant_id: process.env.ASST_MODEL,
-      model: process.env.MODEL,
-      // instructions: "",
-    });
+  const maxRetries = 3; // Set a maximum number of retries
+  let attempt = 0;
 
-    console.log('Run completed on thread:', threadId);
-    return run;
-  } catch (error) {
-    console.error('Error running thread:', error.response ? error.response.data : error.message);
-    throw new Error('An error occurred while running the assistant on the thread.');
+  while (attempt < maxRetries) {
+    try {
+      console.warn(`Running assistant on thread: ${threadId} (Attempt ${attempt + 1})`);
+      const run = await openai.beta.threads.runs.createAndPoll(threadId, {
+        assistant_id: process.env.ASST_MODEL,
+        model: process.env.MODEL,
+        // instructions: "",
+      });
+
+      if (run.status === 'completed') {
+        console.log('Run completed successfully on thread:', threadId);
+        return run;
+      } else {
+        console.error(`Run did not complete successfully. Status: ${run.status}`);
+      }
+    } catch (error) {
+      console.error('Error running thread:', error.response ? error.response.data : error.message);
+    }
+
+    attempt++;
+    if (attempt < maxRetries) {
+      console.log('Waiting 5 seconds before retrying...');
+      await new Promise(resolve => setTimeout(resolve, 5000)); // Wait for 5 seconds
+    }
   }
+
+  throw new Error('Max retries reached. Failed to complete the assistant run.');
 }
 
 // Utility function to fetch all messages in a Farcaster thread
