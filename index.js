@@ -4,6 +4,7 @@ const { NeynarAPIClient } = require('@neynar/nodejs-sdk');
 const OpenAI = require('openai');
 const { getOpenAIThreadId, saveOpenAIThreadId } = require('./threadUtils');
 const TinyURL = require('tinyurl');
+const axios = require('axios'); 
 require('dotenv').config();
 
 // Initialize Neynar client
@@ -120,9 +121,9 @@ app.post('/webhook', async (req, res) => {
     // Check if the message includes #generateimage
     if (castText.includes('#generateimage')) {
       imageUrl = await generateImage(threadId, castText);
-    }
-
-    if (shouldRun) {
+      botMessage = "heres ur image mfer"
+    } else {
+      if (shouldRun) {
       const run = await runThread(threadId);
 
       // Check if the run has completed successfully
@@ -152,6 +153,7 @@ app.post('/webhook', async (req, res) => {
         console.error(`Run did not complete successfully. Status: ${run.status}`);
       }
     }
+    }
 
     // Step 7: Reply to the cast with the Assistant's response and attach the image if generated
     const replyOptions = {
@@ -177,14 +179,42 @@ app.post('/webhook', async (req, res) => {
   }
 });
 
-async function generateImage(castText) {
+async function generateImage(threadId, castText) {
   try {
     console.log('Image generation requested.');
 
-    // Step 1: Ask Assistant to create an image prompt based on the user's message
+    // Step 1: Check for all #mfer[id] patterns and fetch the descriptions
+    const mferPattern = /#mfer(\d+)/g; // Use global flag to match all occurrences
+    const matches = [...castText.matchAll(mferPattern)]; // Get all matches
+
+    if (matches.length > 0) {
+      console.log(`Found mfer IDs: ${matches.map(match => match[1])}`);
+
+      // Fetch descriptions for all matched mfer IDs
+      const fetchDescriptions = matches.map(async match => {
+        const mferId = match[1]; // Extract the mfer ID from each match
+        try {
+          const response = await axios.get(`https://gpt.mfers.dev/descriptions/${mferId}.json`);
+          return { id: mferId, description: response.data.description };
+        } catch (fetchError) {
+          console.error(`Error fetching mfer description for ID ${mferId}: ${fetchError.message}`);
+          return { id: mferId, description: `mfer ${mferId}` }; // Fallback to generic description if fetch fails
+        }
+      });
+
+      // Resolve all promises and replace the hashtags with their descriptions
+      const descriptions = await Promise.all(fetchDescriptions);
+      descriptions.forEach(({ id, description }) => {
+        castText = castText.replace(new RegExp(`#mfer${id}`, 'g'), description);
+      });
+
+      console.log(`Modified cast text with descriptions: ${castText}`);
+    }
+
+    // Step 2: Ask Assistant to create an image prompt based on the user's message
     const imagePrompt = `Create image: "${castText.replace('#generateimage', '').trim()}"`;
 
-    // Step 2: Generate the image using the prompt
+    // Step 3: Generate the image using the prompt
     const imageResponse = await openai.images.generate({
       prompt: imagePrompt,
       n: 1,
@@ -196,7 +226,7 @@ async function generateImage(castText) {
 
     let longUrl = imageResponse.data[0].url;
 
-    // Step 3: Shorten the image URL
+    // Step 4: Shorten the image URL
     const imageUrl = await TinyURL.shorten(longUrl);
     console.log(`Image generated and shortened URL: ${imageUrl}`);
 
