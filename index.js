@@ -6,6 +6,7 @@ const { getOpenAIThreadId, saveOpenAIThreadId } = require('./threadUtils');
 const TinyURL = require('tinyurl');
 const axios = require('axios'); 
 const fetch = require('node-fetch'); // Import node-fetch for making API requests
+const FormData = require('form-data');
 
 require('dotenv').config();
 
@@ -288,8 +289,8 @@ async function generateImage(threadId, castText) {
       console.log(`Modified cast text with descriptions: ${castText}`);
     }
 
-    // Step 2: Ask Assistant to create an image prompt based on the user's message
-    const imagePrompt = `Create image: "${castText.replace('#generateimage', '').trim()}"`;
+    // Step 2: Create an image prompt based on the user's message
+    const imagePrompt = `${castText.replace('#generateimage', '').trim()}`;
 
     // Step 3: Generate the image using the prompt
     const imageResponse = await openai.images.generate({
@@ -297,15 +298,27 @@ async function generateImage(threadId, castText) {
       n: 1,
       size: "1024x1024",
       model: "dall-e-3",
-      style: "vivid",
-      quality: "hd"
+      response_format: "b64_json", // Get the image data in base64 format
     });
 
-    let longUrl = imageResponse.data[0].url;
+    const imageBase64 = imageResponse.data[0].b64_json;
 
-    // Step 4: Shorten the image URL
-    const imageUrl = await TinyURL.shorten(longUrl);
-    console.log(`Image generated and shortened URL: ${imageUrl}`);
+    // Step 4: Upload the image to FreeImage.host
+    const FormData = require('form-data');
+    const formData = new FormData();
+    formData.append('key', process.env.FREEIMAGE_API_KEY); // Your API key for FreeImage.host
+    formData.append('action', 'upload');
+    formData.append('source', imageBase64);
+    formData.append('format', 'json');
+
+    const uploadResponse = await axios.post('https://freeimage.host/api/1/upload', formData, {
+      headers: formData.getHeaders(),
+    });
+
+    // Extract the image URL from the response
+    // const imageUrl = uploadResponse.data.image.url.full;
+    const imageUrl = uploadResponse.data.image.url; // Full-size image
+    console.log(`Image generated and uploaded. URL: ${imageUrl}`);
 
     return imageUrl;
   } catch (error) {
@@ -313,6 +326,7 @@ async function generateImage(threadId, castText) {
     return null;
   }
 }
+  
 
 app.listen(PORT, () => {
   console.log(`Server is listening on http://localhost:${PORT}`);
