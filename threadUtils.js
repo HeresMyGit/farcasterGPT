@@ -2,6 +2,7 @@ const fs = require('fs');
 const path = require('path');
 
 const THREADS_FILE = path.resolve(__dirname, 'threadMappings.json');
+const RECENT_THREADS_FILE = path.resolve(__dirname, 'recent_threads.json');
 
 // Load existing thread mappings from file
 function loadThreadMappings() {
@@ -17,10 +18,37 @@ function saveThreadMappings(mappings) {
   fs.writeFileSync(THREADS_FILE, JSON.stringify(mappings, null, 2));
 }
 
+// Load existing recent threads from file
+function loadRecentThreads() {
+  if (fs.existsSync(RECENT_THREADS_FILE)) {
+    const data = fs.readFileSync(RECENT_THREADS_FILE, 'utf-8');
+    return JSON.parse(data);
+  }
+  return {};
+}
+
+// Save updated recent threads to file
+function saveRecentThreads(recentThreads) {
+  fs.writeFileSync(RECENT_THREADS_FILE, JSON.stringify(recentThreads, null, 2));
+}
+
+// Update recent threads with the current access or save action
+function updateRecentThreads(threadId) {
+  const recentThreads = loadRecentThreads();
+  recentThreads[threadId] = {
+    timestamp: new Date().toISOString(),
+  };
+  saveRecentThreads(recentThreads);
+}
+
 // Retrieve OpenAI thread ID by Farcaster thread ID
 function getOpenAIThreadId(farcasterThreadId) {
   const mappings = loadThreadMappings();
-  return mappings[farcasterThreadId];
+  const openAIThreadId = mappings[farcasterThreadId];
+  if (openAIThreadId) {
+    updateRecentThreads(farcasterThreadId);
+  }
+  return openAIThreadId;
 }
 
 // Save the mapping of Farcaster thread to OpenAI thread
@@ -28,6 +56,12 @@ function saveOpenAIThreadId(farcasterThreadId, openAIThreadId) {
   const mappings = loadThreadMappings();
   mappings[farcasterThreadId] = openAIThreadId;
   saveThreadMappings(mappings);
+  updateRecentThreads(farcasterThreadId);
 }
 
-module.exports = { loadThreadMappings, saveThreadMappings, getOpenAIThreadId, saveOpenAIThreadId };
+module.exports = {
+  loadThreadMappings,
+  saveThreadMappings,
+  getOpenAIThreadId,
+  saveOpenAIThreadId,
+};

@@ -3,6 +3,8 @@
 const fs = require('fs');
 const OpenAI = require('openai');
 const fetch = require('node-fetch'); // Include node-fetch
+const path = require('path');
+
 require('dotenv').config();
 
 // Initialize OpenAI client
@@ -11,10 +13,16 @@ const openai = new OpenAI({
   organization: process.env.OPENAI_ORG,
 });
 
-// Function to read daily summaries
+const PREVIOUS_SUMMARIES_FILE = path.resolve(__dirname, 'previous_summaries.json');
+
+// Function to read daily summaries for the current day
 function readDailySummaries() {
   const data = fs.readFileSync('daily_summary.json', 'utf8');
-  return JSON.parse(data);
+  const summaries = JSON.parse(data);
+  const today = new Date().toISOString().split('T')[0];
+
+  // Filter summaries with today's date
+  return summaries.filter(summary => summary.date === today);
 }
 
 // Function to read previous summaries, if any
@@ -161,20 +169,31 @@ async function publishPost(content) {
   }
 }
 
-// Main function
-(async () => {
+async function castDailySummary() {
   const summaries = readDailySummaries();
   const previousSummaries = readPreviousSummaries();
 
-  const dailyPost = await generateDailyPost(summaries, previousSummaries);
+  const dailyPostContent = await generateDailyPost(summaries, previousSummaries);
+
+  // Create the formatted entry for the JSON file
+  const newEntry = {
+    date: new Date().toISOString().split('T')[0],
+    farcasterThreadId: summaries[0]?.farcasterThreadId || 'unknown', // Use the first Farcaster thread ID or 'unknown' if none
+    summary: dailyPostContent,
+  };
 
   // Print the generated post to console
-  console.log('Generated Daily Post:');
-  console.log(dailyPost);
+  console.log('Generated Daily Post:', newEntry);
 
-  // Save today's summaries to previous_summaries.json for future context
-  fs.writeFileSync('previous_summaries.json', JSON.stringify(summaries, null, 2));
+  // Read existing posts, append the new entry, and write back to the file
+  const existingPosts = readPreviousSummaries();
+  existingPosts.push(newEntry);
 
-  // Cast the post
-  await publishPost(dailyPost);
-})();
+  // Write the updated list of posts to the file
+  fs.writeFileSync(PREVIOUS_SUMMARIES_FILE, JSON.stringify(existingPosts, null, 2));
+
+  // Cast the post (uncomment to enable posting)
+  await publishPost(dailyPostContent);
+}
+
+module.exports = { castDailySummary };

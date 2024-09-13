@@ -1,6 +1,7 @@
 // daily_summary.js
 
 const fs = require('fs');
+const path = require('path');
 const OpenAI = require('openai');
 const { NeynarAPIClient } = require('@neynar/nodejs-sdk');
 require('dotenv').config();
@@ -15,8 +16,7 @@ const openai = new OpenAI({
 // Initialize Neynar client
 const neynarClient = new NeynarAPIClient(process.env.NEYNAR_API_KEY);
 
-// Read the threadMapping.json file
-const threadMapping = JSON.parse(fs.readFileSync('threadMappings.json', 'utf8'));
+const RECENT_THREADS_FILE = path.resolve(__dirname, 'recent_threads.json');
 
 // Initialize an array to hold summaries
 let summaries = [];
@@ -24,31 +24,44 @@ let summaries = [];
 // Get today's date
 const today = new Date().toISOString().split('T')[0];
 
-// Main function
-(async () => {
-  for (const [farcasterThreadId, openaiThreadId] of Object.entries(threadMapping)) {
+// Load recent Farcaster threads accessed within the last 24 hours
+function loadRecentThreads() {
+  if (fs.existsSync(RECENT_THREADS_FILE)) {
+    const data = fs.readFileSync(RECENT_THREADS_FILE, 'utf-8');
+    const recentThreads = JSON.parse(data);
+    const now = new Date();
+
+    // Filter threads accessed within the last 24 hours
+    return Object.entries(recentThreads)
+      .filter(([threadId, details]) => {
+        const threadDate = new Date(details.timestamp);
+        const hoursDifference = (now - threadDate) / (1000 * 60 * 60);
+        return hoursDifference <= 24;
+      })
+      .map(([threadId]) => threadId);
+  }
+  return [];
+}
+
+async function runDailySummary() {
+  const recentFarcasterThreadIds = loadRecentThreads();
+
+  for (const farcasterThreadId of recentFarcasterThreadIds) {
     try {
       // Get messages from Farcaster thread
       const farcasterMessages = await fetchFarcasterThreadMessages(farcasterThreadId);
 
-      // Get messages from OpenAI thread
-      const openaiMessages = await getOpenAIThreadMessages(openaiThreadId);
-
       // Use mferGPT to write a summary of what happened
-      const summary = await generateSummary(farcasterMessages, openaiMessages);
+      const summary = await generateSummary(farcasterMessages);
 
       // Push the summary to the summaries array
       summaries.push({
         date: today,
         farcasterThreadId,
-        openaiThreadId,
         summary,
       });
     } catch (error) {
-      console.error(
-        `Error processing threads Farcaster: ${farcasterThreadId}, OpenAI: ${openaiThreadId}:`,
-        error
-      );
+      console.error(`Error processing Farcaster thread: ${farcasterThreadId}:`, error);
     }
   }
 
@@ -56,7 +69,7 @@ const today = new Date().toISOString().split('T')[0];
   fs.writeFileSync('daily_summary.json', JSON.stringify(summaries, null, 2));
 
   console.log('Daily summary saved to daily_summary.json');
-})();
+}
 
 // Functions
 
@@ -71,7 +84,7 @@ async function fetchFarcasterThreadMessages(castHash) {
   };
 
   try {
-    console.warn(`fetching farcaster thread: ${castHash}`)
+    console.warn(`Fetching Farcaster thread: ${castHash}`);
     const response = await fetch(url, options);
     if (!response.ok) {
       throw new Error(`Failed to fetch thread messages: ${response.statusText}`);
@@ -107,46 +120,17 @@ async function fetchFarcasterThreadMessages(castHash) {
   }
 }
 
-async function getOpenAIThreadMessages(threadId) {
-  try {
-    const messages = await openai.beta.threads.messages.list(threadId);
-    if (messages && messages.data && messages.data.length > 0) {
-      return messages.data;
-    } else {
-      console.error('No messages found in the thread.');
-      return [];
-    }
-  } catch (error) {
-    console.error('Error fetching OpenAI thread messages:', error);
-    return [];
-  }
-}
-
-async function generateSummary(farcasterMessages, openaiMessages) {
+async function generateSummary(farcasterMessages) {
   // Prepare the messages for summarization
   const farcasterText = farcasterMessages
     .map((msg) => `${msg.author.display_name}: ${msg.text}`)
     .join('\n');
-  const openaiAssistantMessages = openaiMessages
-    .filter((msg) => msg.role === 'assistant')
-    .map((msg) => `Assistant: ${msg.content[0].text.value}`)
-    .join('\n');
-  const openaiUserMessages = openaiMessages
-    .filter((msg) => msg.role === 'user')
-    .map((msg) => `User: ${msg.content[0].text.value}`)
-    .join('\n');
 
   // Prepare the prompt
-  const prompt = `Summarize the following conversation between users on Farcaster and OpenAI assistant:
+  const prompt = `Summarize the following conversation between users on Farcaster:
 
 Farcaster Messages:
 ${farcasterText}
-
-OpenAI Assistant Messages:
-${openaiAssistantMessages}
-
-OpenAI User Messages:
-${openaiUserMessages}
 
 Summary:
 `;
@@ -154,10 +138,8 @@ Summary:
   // Use OpenAI's API to generate the summary
   try {
     const completion = await openai.chat.completions.create({
-      model: 'gpt-4',
-      messages: [{ role: 'user', content: prompt }],
-      max_tokens: 300,
-      temperature: 0.7,
+      model: 'gpt-4o-mini',
+      messages: [{ role: 'user', content: prompt }]
     });
 
     const summary = completion.choices[0].message.content;
@@ -167,3 +149,5 @@ Summary:
     return 'Summary could not be generated.';
   }
 }
+
+module.exports = { runDailySummary };
