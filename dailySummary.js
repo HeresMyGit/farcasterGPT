@@ -3,9 +3,10 @@
 const fs = require('fs');
 const path = require('path');
 const OpenAI = require('openai');
-const { NeynarAPIClient } = require('@neynar/nodejs-sdk');
+const { NeynarAPIClient, FeedType, FilterType } = require('@neynar/nodejs-sdk');
 require('dotenv').config();
 const fetch = require('node-fetch');
+const { saveTrendingSummaries } = require('./threadUtils');
 
 // Initialize OpenAI client
 const openai = new OpenAI({
@@ -23,6 +24,46 @@ let summaries = [];
 
 // Get today's date
 const today = new Date().toISOString().split('T')[0];
+
+async function runTrendingSummary() {
+  // Fetch the latest trending casts
+  const feed = await neynarClient.fetchFeed(FeedType.Filter, {
+    filterType: FilterType.GlobalTrending,
+  });
+
+  const trendingCasts = feed.casts;
+
+  // Initialize an array to hold summaries
+  let trendingSummaries = [];
+
+  // Get today's date
+  const today = new Date().toISOString().split('T')[0];
+
+  for (const cast of trendingCasts) {
+    const castHash = cast.hash;
+    try {
+      // Get messages from Farcaster thread
+      const farcasterMessages = await fetchFarcasterThreadMessages(castHash);
+
+      // Use OpenAI to write a summary of what happened
+      const summary = await generateSummary(farcasterMessages);
+
+      // Push the summary to the trendingSummaries array
+      trendingSummaries.push({
+        date: today,
+        farcasterThreadId: castHash,
+        summary,
+      });
+    } catch (error) {
+      console.error(`Error processing Farcaster thread: ${castHash}:`, error);
+    }
+  }
+
+  // Save the summaries using threadUtils function
+  saveTrendingSummaries(trendingSummaries);
+
+  console.log('Trending summaries saved to trending_summaries.json');
+}
 
 // Load recent Farcaster threads accessed within the last 24 hours
 function loadRecentThreads() {
@@ -150,4 +191,4 @@ Summary:
   }
 }
 
-module.exports = { runDailySummary };
+module.exports = { runDailySummary, runTrendingSummary };

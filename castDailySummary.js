@@ -4,6 +4,7 @@ const fs = require('fs');
 const OpenAI = require('openai');
 const fetch = require('node-fetch'); // Include node-fetch
 const path = require('path');
+const { loadTrendingSummaries } = require('./threadUtils');
 
 require('dotenv').config();
 
@@ -73,7 +74,7 @@ async function generateDailyPost(summaries, previousSummaries) {
   const todaySummariesText = summaries.map((s) => `- ${s.summary}`).join('\n');
   const previousSummariesText = previousSummaries.map((s) => `- ${s.summary}`).join('\n');
 
-  const prompt = `Based on the following summaries of conversations that happened today on Farcaster, write a brief post summarizing what people were up to that day.
+  const prompt = `Based on the following summaries of conversations that mferGPT was tagged in today on Farcaster, write a brief post summarizing what people were up to today involving mferGPT.
 
 Today's Summaries:
 ${todaySummariesText}
@@ -81,9 +82,11 @@ ${todaySummariesText}
 Use previous context if needed:
 ${previousSummariesText}
 
-Your post should be engaging and capture the main activities and topics discussed by the users.
+Your post should be engaging and capture the main activities and topics discussed by the users and how they used mferGPT to achieve it.
 
 Keep it under 320 bytes since this will be sent in a Farcaster message, so succinct points and brevity is key. Use bullet points for topics.
+
+The title or greeting of your post should somehow reference how these are threads mfergpt interacted with.
 
 Post:
 `;
@@ -196,4 +199,95 @@ async function castDailySummary() {
   await publishPost(dailyPostContent);
 }
 
-module.exports = { castDailySummary };
+// trending
+
+async function castTrendingSummary() {
+  // Read the trending summaries using threadUtils function
+  const summaries = loadTrendingSummaries();
+
+  const trendingPostContent = await generateTrendingPost(summaries);
+
+  // Create the formatted entry for the JSON file
+  const newEntry = {
+    date: new Date().toISOString().split('T')[0],
+    summary: trendingPostContent,
+  };
+
+  // Optionally, save or append the new entry to a file if needed
+
+  // Print the generated post to console
+  console.log('Generated Trending Post:', newEntry);
+
+  // Cast the post
+  await publishPost(trendingPostContent);
+}
+
+async function generateTrendingPost(summaries) {
+  const trendingSummariesText = summaries.map((s) => `- ${s.summary}`).join('\n');
+
+  const prompt = `Based on the following summaries of trending conversations on Farcaster, write a brief post summarizing the current trending topics and discussions.
+
+Trending Summaries:
+${trendingSummariesText}
+
+Your post should be engaging and capture the main activities and topics that are currently trending on Farcaster.
+
+Keep it under 320 bytes since this will be sent in a Farcaster message, so succinct points and brevity are key. Use bullet points for topics.
+
+Post:
+`;
+
+  try {
+    const thread = await openai.beta.threads.create({});
+
+    const threadId = thread.id;
+
+    // Send the prompt to the assistant
+    await openai.beta.threads.messages.create(threadId, {
+      role: 'user',
+      content: prompt,
+    });
+
+    // Run the assistant on the thread
+    const run = await runThread(threadId);
+
+    if (run.status === 'completed') {
+      const messages = await openai.beta.threads.messages.list(threadId);
+
+      if (messages && messages.data && messages.data.length > 0) {
+        const assistantMessages = messages.data.filter((msg) => msg.role === 'assistant');
+
+        if (assistantMessages.length === 0) {
+          console.error('No assistant messages found.');
+          return 'No assistant response generated.';
+        }
+
+        const latestAssistantMessage = assistantMessages[0];
+        if (
+          latestAssistantMessage &&
+          latestAssistantMessage.content &&
+          latestAssistantMessage.content[0] &&
+          latestAssistantMessage.content[0].text
+        ) {
+          const postContent = latestAssistantMessage.content[0].text.value;
+          console.log(`Generated daily post using threadID ${threadId}`);
+          return postContent;
+        } else {
+          console.error('Assistant message content is not structured as expected.');
+          return 'Assistant message content is not structured as expected.';
+        }
+      } else {
+        console.error('No messages found in the thread.');
+        return 'No messages found in the thread.';
+      }
+    } else {
+      console.error(`Run did not complete successfully. Status: ${run.status}`);
+      return `Run did not complete successfully. Status: ${run.status}`;
+    }
+  } catch (error) {
+    console.error('Error generating trending post:', error);
+    return 'Could not generate trending post.';
+  }
+}
+
+module.exports = { castDailySummary, castTrendingSummary };
