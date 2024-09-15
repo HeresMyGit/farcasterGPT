@@ -4,7 +4,7 @@ const path = require('path');
 const THREADS_FILE = path.resolve(__dirname, 'threadMappings.json');
 const RECENT_THREADS_FILE = path.resolve(__dirname, 'recent_threads.json');
 const TRENDING_SUMMARIES_FILE = path.resolve(__dirname, 'trending_summaries.json');
-
+const USER_PROFILES_FILE = path.resolve(__dirname, 'userProfiles.json');
 
 // Load existing thread mappings from file
 function loadThreadMappings() {
@@ -75,6 +75,20 @@ function saveTrendingSummaries(summaries) {
   fs.writeFileSync(TRENDING_SUMMARIES_FILE, JSON.stringify(summaries, null, 2));
 }
 
+// Load user profiles from file
+function loadUserProfiles() {
+  if (fs.existsSync(USER_PROFILES_FILE)) {
+    const data = fs.readFileSync(USER_PROFILES_FILE, 'utf-8');
+    return JSON.parse(data);
+  }
+  return {};
+}
+
+// Save user profiles to file
+function saveUserProfiles(profiles) {
+  fs.writeFileSync(USER_PROFILES_FILE, JSON.stringify(profiles, null, 2));
+}
+
 module.exports = {
   loadThreadMappings,
   saveThreadMappings,
@@ -82,4 +96,6 @@ module.exports = {
   saveOpenAIThreadId,
   loadTrendingSummaries,
   saveTrendingSummaries,
+  loadUserProfiles,
+  saveUserProfiles,
 };

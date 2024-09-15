@@ -79,9 +79,6 @@ async function generateDailyPost(summaries, previousSummaries) {
 Today's Summaries:
 ${todaySummariesText}
 
-Use previous context if needed:
-${previousSummariesText}
-
 Your post should be engaging and capture the main activities and topics discussed by the users and how they used mferGPT to achieve it.
 
 Keep it under 320 bytes since this will be sent in a Farcaster message, so succinct points and brevity is key. Use bullet points for topics.

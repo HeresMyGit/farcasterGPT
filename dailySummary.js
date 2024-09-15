@@ -115,7 +115,7 @@ async function runDailySummary() {
 // Functions
 
 async function fetchFarcasterThreadMessages(castHash) {
-  const url = `https://api.neynar.com/v2/farcaster/cast/conversation?identifier=${castHash}&type=hash&reply_depth=2&include_chronological_parent_casts=false&limit=20`;
+  const url = `https://api.neynar.com/v2/farcaster/cast/conversation?identifier=${castHash}&type=hash&reply_depth=5&include_chronological_parent_casts=false&limit=40`;
   const options = {
     method: 'GET',
     headers: {
