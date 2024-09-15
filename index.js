@@ -49,10 +49,10 @@ async function handleRequiresAction(run, threadId) {
             console.log(`Loaded profile for ${username} from cache.`);
           } else {
             // Step 2: Generate the profile on the fly if not found
+            console.warn(`Generating profile on the fly for ${username}...`);
             userProfile = await buildProfilOnTheFly(username);
             console.log(`Generated profile on the fly for ${username}.`);
           }
-          console.log(`fetch_user_profile: ${username}`)
           return {
             tool_call_id: tool.id,
             output: JSON.stringify(userProfile), // Format the fetched profile data
@@ -86,7 +86,7 @@ const handleRunStatus = async (run) => {
   // Check if the run is completed
   if (run.status === "completed") {
     let messages = await client.beta.threads.messages.list(thread.id);
-    console.log(messages.data);
+    // console.log(messages.data);
     return messages.data;
   } else if (run.status === "requires_action") {
     console.log(run.status);
@@ -131,7 +131,7 @@ async function createMessage(threadId, userMessage) {
         role: 'user',
         content: userMessage,
       });
-      console.log('Message created in thread:', threadId);
+      // console.log('Message created in thread:', threadId);
       return; // Exit the loop after successful creation
     } catch (error) {
       // Check if the error indicates a run in progress or other retryable conditions
@@ -222,8 +222,8 @@ async function runThread(threadId, userProfiles, authorUsername) {
     try {
       console.warn(`Running assistant on thread: ${threadId} (Attempt ${attempt + 1})`);
 
-      const instructions = `use the following user profiles as context for generating responses. these users were tagged in the thread or replied to the thread. remember that YOU are @mferGPT, do NOT respond to yourself. remember ur original instructions and type like sartoshi all lowercase and mfer-like. always keep your response under 320 bytes:\n${userContext}`;
-      console.log(`instructions: ${instructions}`);
+      // const instructions = `use the following user profiles as context for generating responses. these users were tagged in the thread or replied to the thread. remember that YOU are @mferGPT, do NOT respond to yourself. remember ur original instructions and type like sartoshi all lowercase and mfer-like. always keep your response under 320 bytes:\n${userContext}`;
+      // console.log(`instructions: ${instructions}`);
 
       // Combine the instructions with the user context for better responses
       let run = await openai.beta.threads.runs.createAndPoll(threadId, {
@@ -457,7 +457,6 @@ async function buildProfilOnTheFly(username) {
       })), // Ensure to map recent casts properly
     };
 
-    console.log(`Generated user profile details for ${username}:\n`, JSON.stringify(userProfileDetails, null, 2));
     return userProfileDetails;
 
   } catch (error) {
@@ -473,8 +472,6 @@ async function buildProfilOnTheFly(username) {
 
 // Function to fetch user profile
 async function fetchUserProfile(query) {
-  console.warn(`Searching for users with query: ${query}`);
-
   const url = `https://api.neynar.com/v2/farcaster/user/search?q=${query}&limit=5`;
   const options = {
     method: 'GET',
@@ -496,7 +493,6 @@ async function fetchUserProfile(query) {
 
     // Check if there are any users in the result and return the first one
     if (data.result && data.result.users && data.result.users.length > 0) {
-      console.log(`found user: ${JSON.stringify(data.result.users[0], null, 2)}`); // Pretty-print the user data
       return data.result.users[0]; // Return the first user found
     } else {
       console.warn(`No users found for query: ${query}`);
@@ -527,11 +523,11 @@ async function getPopularCasts(fid) {
       throw new Error(`Failed to fetch popular casts: ${response.statusText}`);
     }
     const data = await response.json();
-    console.log(data);
-    return data.casts;
+    // Return only the first 3 results
+    return data.casts.slice(0, 3);
   } catch (error) {
     console.error('Error fetching popular casts:', error);
-    return []
+    return [];
   }
 }
 
@@ -551,7 +547,6 @@ async function getRecentCasts(fid) {
       throw new Error(`Failed to fetch recent casts: ${response.statusText}`);
     }
     const data = await response.json();
-    console.log(data);
     return data.casts;
   } catch (error) {
     console.error('Error fetching recent casts:', error);
@@ -583,7 +578,7 @@ async function generateUserProfile(username) {
   const validPopularCasts = Array.isArray(popularCasts) ? popularCasts : [];
   const validRecentCasts = Array.isArray(recentCasts) ? recentCasts : [];
 
-  console.log(`Generating user profile for ${username}\n\nProfile: ${JSON.stringify(profile, null, 2)}\n\nPopular Casts: ${JSON.stringify(validPopularCasts, null, 2)}\n\nRecent Casts: ${JSON.stringify(validRecentCasts, null, 2)}`);
+  console.log(`Generating user profile for ${username}`);
 
   return {
     profile,
@@ -599,19 +594,16 @@ async function updateUserProfilesFromMessages(messages) {
   console.log('Starting updateUserProfilesFromMessages...');
 
   // Load existing user profiles
-  console.log('Loading existing user profiles...');
   const userProfiles = loadUserProfiles();
 
   // Collect all usernames from messages
   const allUsernames = new Set();
-  console.log('Initialized an empty set for all usernames.');
 
   // Build a mapping from message hash to message object
   const hashToMessage = {};
   messages.forEach((msg) => {
     if (msg.hash) {
       hashToMessage[msg.hash] = msg;
-      console.log(`Mapped message with hash ${msg.hash} to hashToMessage.`);
     }
   });
 
@@ -676,7 +668,6 @@ async function updateUserProfilesFromMessages(messages) {
   }
 
   // Save updated user profiles
-  console.log('Saving updated user profiles...');
   saveUserProfiles(userProfiles);
   console.log('User profiles updated and saved successfully.');
 }
@@ -865,8 +856,6 @@ async function generateImage(threadId, castText) {
     const matches = [...castText.matchAll(mferPattern)]; // Get all matches
 
     if (matches.length > 0) {
-      console.log(`Found mfer IDs: ${matches.map(match => match[1])}`);
-
       // Fetch descriptions for all matched mfer IDs
       const fetchDescriptions = matches.map(async match => {
         const mferId = match[1]; // Extract the mfer ID from each match
