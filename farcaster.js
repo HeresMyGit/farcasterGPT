@@ -309,6 +309,161 @@ async function getRecentCasts(fid) {
   }
 }
 
+// Function to build channel details on the fly using getChannelDetails and getTrendingCasts
+async function buildChannelDetailsOnTheFly(channelId) {
+  try {
+    // Step 1: Fetch the channel details
+    const channelDetails = await getChannelDetails(channelId);
+
+    // Check if the channel details were fetched successfully
+    if (!channelDetails || channelDetails.length === 0) {
+      console.error(`Could not find details for channel ID: ${channelId}`);
+      return {
+        channel: null,
+        trendingCasts: [],
+        error: `Channel details not found for ID: ${channelId}`
+      };
+    }
+
+    // Extract the first channel as the relevant channel
+    const channel = channelDetails[0];
+
+    // Step 2: Fetch trending casts for the channel
+    const trendingCasts = await getTrendingCasts(channelId);
+
+    // Step 3: Structure the result into a consolidated dictionary
+    const channelDetailsResult = {
+      channel: {
+        id: channel.id,
+        name: channel.name,
+        description: channel.description,
+        followerCount: channel.followerCount,
+        url: channel.url,
+        imageUrl: channel.imageUrl,
+        lead: {
+          username: channel.lead.username,
+          displayName: channel.lead.displayName,
+          bio: channel.lead.bio,
+          followerCount: channel.lead.followerCount,
+          verifiedAddresses: channel.lead.verifiedAddresses,
+          powerBadge: channel.lead.powerBadge,
+        }
+      },
+      trendingCasts: trendingCasts.map(cast => ({
+        text: cast.text,
+        timestamp: cast.timestamp,
+        author: cast.author.username,
+        likesCount: cast.reactions.likesCount,
+        recastsCount: cast.reactions.recastsCount,
+        embeds: cast.embeds,
+        repliesCount: cast.repliesCount,
+      }))
+    };
+
+    return channelDetailsResult;
+
+  } catch (error) {
+    console.error(`Error generating channel details for channel ID "${channelId}":`, error.message);
+    return {
+      channel: null,
+      trendingCasts: [],
+      error: error.message
+    };
+  }
+}
+
+// Function to fetch Farcaster channel details based on a search query
+async function getChannelDetails(query) {
+  console.warn(`Fetching channel details for query: ${query}`);
+  const url = `https://api.neynar.com/v2/farcaster/channel/search?q=${encodeURIComponent(query)}&limit=3`;
+  const options = {
+    method: 'GET',
+    headers: {
+      accept: 'application/json',
+      api_key: process.env.NEYNAR_API_KEY, // Ensure the API key is set correctly
+    },
+  };
+
+  try {
+    const response = await fetch(url, options);
+    if (!response.ok) {
+      throw new Error(`Failed to fetch channel details: ${response.statusText}`);
+    }
+    const data = await response.json();
+    console.warn("Fetched channel details successfully.");
+
+    // Map the relevant data from the response
+    const channels = data.channels.map(channel => ({
+      id: channel.id,
+      name: channel.name,
+      description: channel.description,
+      followerCount: channel.follower_count,
+      url: channel.url,
+      imageUrl: channel.image_url,
+      createdAt: channel.created_at,
+      lead: {
+        username: channel.lead.username,
+        displayName: channel.lead.display_name,
+        bio: channel.lead.profile?.bio?.text || "",
+        followerCount: channel.lead.follower_count,
+        verifiedAddresses: channel.lead.verified_addresses.eth_addresses || [],
+        powerBadge: channel.lead.power_badge,
+      },
+    }));
+
+    return channels;
+  } catch (error) {
+    console.error(`Error fetching channel details for query "${query}":`, error.message);
+    return [];
+  }
+}
+
+// Function to fetch trending Farcaster casts from a specific channel
+async function getTrendingCasts(channelId, limit = 5, timeWindow = '7d') {
+  console.warn(`Fetching trending casts for channel ID: ${channelId}`);
+  const url = `https://api.neynar.com/v2/farcaster/feed/trending?limit=${limit}&time_window=${timeWindow}&channel_id=${channelId}&provider=neynar`;
+  const options = {
+    method: 'GET',
+    headers: {
+      accept: 'application/json',
+      api_key: process.env.NEYNAR_API_KEY,
+    },
+  };
+
+  try {
+    const response = await fetch(url, options);
+    if (!response.ok) {
+      throw new Error(`Failed to fetch trending casts: ${response.statusText}`);
+    }
+    const data = await response.json();
+    console.warn("Fetched trending casts successfully.");
+
+    // Process the data as needed, e.g., log or return it
+    return data.casts.map(cast => ({
+      hash: cast.hash,
+      text: cast.text,
+      author: {
+        username: cast.author.username,
+        displayName: cast.author.display_name,
+        pfpUrl: cast.author.pfp_url,
+        bio: cast.author.profile.bio.text,
+      },
+      timestamp: cast.timestamp,
+      reactions: {
+        likesCount: cast.reactions.likes_count,
+        recastsCount: cast.reactions.recasts_count,
+      },
+      embeds: cast.embeds,
+      repliesCount: cast.replies.count,
+      channel: cast.channel.name,
+    }));
+  } catch (error) {
+    console.error(`Error fetching trending casts for channel "${channelId}":`, error.message);
+    return [];
+  }
+}
+
+
 // Function to generate user profile
 async function generateUserProfile(username) {
   // Fetch the user profile to get the FID
@@ -448,6 +603,7 @@ module.exports = {
   fetchMessageByHash,
   extractUsernames,
   buildProfileOnTheFly,
+  buildChannelDetailsOnTheFly,
   fetchUserProfile,
   getPopularCasts,
   getRecentCasts,

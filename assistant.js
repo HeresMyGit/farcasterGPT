@@ -48,6 +48,19 @@ async function handleRequiresAction(run, threadId) {
             tool_call_id: tool.id,
             output: JSON.stringify(userProfile), // Format the fetched profile data
           };
+        } else if (tool.function.name === "fetch_channel_details") {
+          // Extract the query parameter and fetch the channel details
+          const { query } = JSON.parse(tool.function.arguments);
+          
+          // Generate channel details on the fly
+          console.warn(`Generating channel details on the fly for query: ${query}...`);
+          const channelDetails = await farcaster.buildChannelDetailsOnTheFly(query);
+          console.log(`Generated channel details on the fly for query: ${query}.`);
+
+          return {
+            tool_call_id: tool.id,
+            output: JSON.stringify(channelDetails), // Format the fetched channel details
+          };
         }
         // Add other function handlers if necessary
       })
@@ -487,11 +500,11 @@ async function handleWebhook(req, res) {
       console.log(`Image generated and attached: ${imageUrl}`);
     }
 
-    const reply = await neynarClient.publishCast(
-      process.env.SIGNER_UUID,
-      botMessage,
-      replyOptions
-    );
+    // const reply = await neynarClient.publishCast(
+    //   process.env.SIGNER_UUID,
+    //   botMessage,
+    //   replyOptions
+    // );
 
     console.log('Reply sent:', botMessage);
     res.status(200).send('Webhook received and response sent!');
