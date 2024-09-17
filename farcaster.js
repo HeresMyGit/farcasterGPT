@@ -315,7 +315,7 @@ async function getRecentCasts(fid) {
 }
 
 // Function to build channel details on the fly using getChannelDetails and getTrendingCasts
-async function buildChannelDetailsOnTheFly(channelId) {
+async function buildChannelDetailsOnTheFly(channelId, shouldFetchTrendingCasts = false) {
   try {
     // Step 1: Fetch the channel details
     const channelDetails = await getChannelDetails(channelId);
@@ -333,8 +333,8 @@ async function buildChannelDetailsOnTheFly(channelId) {
     // Extract the first channel as the relevant channel
     const channel = channelDetails[0];
 
-    // Step 2: Fetch trending casts for the channel
-    const trendingCasts = await getTrendingCasts(channelId);
+    // Step 2: Conditionally fetch trending casts for the channel if shouldFetchTrendingCasts is true
+    const trendingCasts = shouldFetchTrendingCasts ? await getTrendingCasts(channelId) : [];
 
     // Step 3: Structure the result into a consolidated dictionary
     const channelDetailsResult = {

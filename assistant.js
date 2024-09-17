@@ -49,12 +49,12 @@ async function handleRequiresAction(run, threadId) {
             output: JSON.stringify(userProfile), // Format the fetched profile data
           };
         } else if (tool.function.name === "fetch_channel_details") {
-          // Extract the query parameter and fetch the channel details
-          const { query } = JSON.parse(tool.function.arguments);
-          
-          // Generate channel details on the fly
-          console.warn(`Generating channel details on the fly for query: ${query}...`);
-          const channelDetails = await farcaster.buildChannelDetailsOnTheFly(query);
+          // Extract the query and shouldFetchTrendingCasts parameters
+          const { query, shouldFetchTrendingCasts = false } = JSON.parse(tool.function.arguments);
+
+          // Generate channel details on the fly with the shouldFetchTrendingCasts parameter
+          console.warn(`Generating channel details on the fly for query: ${query}, shouldFetchTrendingCasts: ${shouldFetchTrendingCasts}...`);
+          const channelDetails = await farcaster.buildChannelDetailsOnTheFly(query, shouldFetchTrendingCasts);
           console.log(`Generated channel details on the fly for query: ${query}.`);
 
           return {
