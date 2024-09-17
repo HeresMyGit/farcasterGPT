@@ -159,7 +159,7 @@ function extractUsernames(text, mentionedProfiles = []) {
 }
 
 // Function to generate a consolidated profile including user profile, popular casts, and recent casts
-async function buildProfileOnTheFly(username) {
+async function buildProfileOnTheFly(username, shouldFetchLatestCasts = false, shouldFetchPopularCasts = false) {
   try {
     // Step 1: Fetch the user profile to get the FID
     const profile = await fetchUserProfile(username);
@@ -178,10 +178,13 @@ async function buildProfileOnTheFly(username) {
     // Extract the FID from the profile
     const fid = profile.fid;
 
-    //Step 2: Fetch popular and recent casts using the FID in parallel
+    // Step 2: Fetch popular and recent casts using the FID in parallel if required
+    const fetchPopularCasts = shouldFetchPopularCasts ? getPopularCasts(fid) : Promise.resolve([]);
+    const fetchRecentCasts = shouldFetchLatestCasts ? getRecentCasts(fid) : Promise.resolve([]);
+
     const [popularCasts, recentCasts] = await Promise.all([
-      getPopularCasts(fid), // Fetch popular casts
-      getRecentCasts(fid)   // Fetch recent casts
+      fetchPopularCasts, // Conditionally fetch popular casts
+      fetchRecentCasts   // Conditionally fetch recent casts
     ]);
 
     // Step 3: Structure the result into a consolidated dictionary
@@ -262,6 +265,7 @@ async function fetchUserProfile(query) {
 async function getPopularCasts(fid) {
   console.warn("Getting popular casts...")
   const url = `https://api.neynar.com/v2/farcaster/feed/user/popular?fid=${fid}&limit=3`;
+  console.warn(`url: ${url}`)
   const options = {
     method: 'GET',
     headers: {
@@ -287,6 +291,7 @@ async function getPopularCasts(fid) {
 async function getRecentCasts(fid) {
   console.warn("Getting recent casts...")
   const url = `https://api.neynar.com/v2/farcaster/feed/user/replies_and_recasts?fid=${fid}&filter=all&limit=3`;
+  console.warn(`url: ${url}`)
   const options = {
     method: 'GET',
     headers: {

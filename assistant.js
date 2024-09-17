@@ -30,19 +30,19 @@ async function handleRequiresAction(run, threadId) {
       run.required_action.submit_tool_outputs.tool_calls.map(async (tool) => {
         if (tool.function.name === "fetch_user_profile") {
           // Extract the username parameter and fetch the user profile
-          const { username } = JSON.parse(tool.function.arguments);
+          const { username, shouldFetchLatestCasts = false, shouldFetchPopularCasts = false } = JSON.parse(tool.function.arguments);
           const relevantUserProfiles = farcaster.loadAndFilterRelevantUserProfiles([username]);
-          
+
           // Check if we have the relevant profile loaded; if not, generate on the fly
           let userProfile;
           // if (relevantUserProfiles && Object.keys(relevantUserProfiles).length > 0) {
           //   userProfile = relevantUserProfiles[username];
           //   console.log(`Loaded profile for ${username} from cache.`);
           // } else {
-            // Step 2: Generate the profile on the fly if not found
-            console.warn(`Generating profile on the fly for ${username}...`);
-            userProfile = await farcaster.buildProfileOnTheFly(username);
-            console.log(`Generated profile on the fly for ${username}.`);
+          // Step 2: Generate the profile on the fly if not found
+          console.warn(`Generating profile on the fly for ${username}...`);
+          userProfile = await farcaster.buildProfileOnTheFly(username, shouldFetchLatestCasts, shouldFetchPopularCasts);
+          console.log(`Generated profile on the fly for ${username}.`);
           // }
           return {
             tool_call_id: tool.id,
@@ -513,11 +513,37 @@ async function handleWebhook(req, res) {
       console.log(`Image generated and attached: ${imageUrl}`);
     }
 
-    const reply = await neynarClient.publishCast(
-      process.env.SIGNER_UUID,
-      botMessage,
-      replyOptions
-    );
+    // Check if the botMessage exceeds the 768 character limit
+    const maxChunkSize = 768;
+    const messageChunks = splitMessageIntoChunks(botMessage, maxChunkSize);
+
+    // Send each chunk sequentially
+    let previousReplyHash = messageHash; // Start with the original message hash for threading
+
+    // Flag to check if the image URL needs to be included
+    let isFirstChunk = true;
+
+    for (const chunk of messageChunks) {
+      // Include the image URL only in the first reply if it exists
+      const currentReplyOptions = {
+        replyTo: previousReplyHash,
+        ...(isFirstChunk && imageUrl ? { embeds: [{ url: imageUrl }] } : {}) // Include image URL only in the first chunk
+      };
+
+      const reply = await neynarClient.publishCast(
+        process.env.SIGNER_UUID,
+        chunk,
+        currentReplyOptions
+      );
+
+      console.log('Reply sent:', chunk);
+      
+      // Update previousReplyHash to thread subsequent messages correctly
+      previousReplyHash = reply.hash;
+      
+      // Set the flag to false after the first chunk
+      isFirstChunk = false;
+    }
 
     console.log('Reply sent:', botMessage);
     res.status(200).send('Webhook received and response sent!');
@@ -526,6 +552,16 @@ async function handleWebhook(req, res) {
     res.status(500).send('Server error');
   }
 }
+
+// Helper function to split the message into chunks of a specified size
+function splitMessageIntoChunks(message, maxChunkSize) {
+  const chunks = [];
+  for (let i = 0; i < message.length; i += maxChunkSize) {
+    chunks.push(message.slice(i, i + maxChunkSize));
+  }
+  return chunks;
+}
+
 
 module.exports = {
   handleRequiresAction,
