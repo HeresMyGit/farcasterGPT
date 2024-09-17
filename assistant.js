@@ -176,68 +176,76 @@ async function runThread(threadId, userProfiles, authorUsername) {
 
   // Create a structured JSON object for all user profiles, ensuring the author's profile comes first
   let allUserProfilesJson = [];
-  
+
   // Add the author's profile first, if it exists
-  if (userProfiles[authorUsername]) {
-    const authorProfile = userProfiles[authorUsername];
-    const { profile, popularCasts, recentCasts } = authorProfile;
+  // if (userProfiles[authorUsername]) {
+  //   const authorProfile = userProfiles[authorUsername];
+  //   const { profile, popularCasts, recentCasts } = authorProfile;
 
-    // Ensure that popularCasts and recentCasts are arrays before mapping
-    const popularCastsList = Array.isArray(popularCasts) ? popularCasts.map(cast => ({ text: cast.text, timestamp: cast.timestamp, author: cast.author.username })) : [];
-    const recentCastsList = Array.isArray(recentCasts) ? recentCasts.map(cast => ({ text: cast.text, timestamp: cast.timestamp, author: cast.author.username })) : [];
+  //   // Ensure that popularCasts and recentCasts are arrays before mapping
+  //   const popularCastsList = Array.isArray(popularCasts)
+  //     ? popularCasts.map(cast => ({ text: cast.text, timestamp: cast.timestamp, author: cast.author.username }))
+  //     : [];
+  //   const recentCastsList = Array.isArray(recentCasts)
+  //     ? recentCasts.map(cast => ({ text: cast.text, timestamp: cast.timestamp, author: cast.author.username }))
+  //     : [];
 
-    // Add the author's profile to the list first
-    allUserProfilesJson.push({
-      profile: {
-        username: profile.username,
-        displayName: profile.display_name,
-        bio: profile.profile.bio.text,
-        followerCount: profile.follower_count,
-        followingCount: profile.following_count
-      },
-      popularCasts: popularCastsList,
-      recentCasts: recentCastsList
-    });
-  } else {
-    console.warn(`No user profile found for the author ${authorUsername}.`);
-  }
+  //   // Add the author's profile to the list first
+  //   allUserProfilesJson.push({
+  //     profile: {
+  //       username: profile.username,
+  //       displayName: profile.display_name,
+  //       bio: profile.profile.bio.text,
+  //       followerCount: profile.follower_count,
+  //       followingCount: profile.following_count,
+  //     },
+  //     popularCasts: popularCastsList,
+  //     recentCasts: recentCastsList,
+  //   });
+  // } else {
+  //   console.warn(`No user profile found for the author ${authorUsername}.`);
+  // }
 
   // Add the other user profiles, skipping the author's profile since it's already added
-  for (const [username, userProfile] of Object.entries(userProfiles)) {
-    if (username === authorUsername) continue; // Skip the author's profile as it's already added
+  // for (const [username, userProfile] of Object.entries(userProfiles)) {
+  //   if (username === authorUsername) continue; // Skip the author's profile as it's already added
 
-    const { profile, popularCasts, recentCasts } = userProfile;
+  //   const { profile, popularCasts, recentCasts } = userProfile;
 
-    // Ensure that popularCasts and recentCasts are arrays before mapping
-    const popularCastsList = Array.isArray(popularCasts) ? popularCasts.map(cast => ({ text: cast.text, timestamp: cast.timestamp, author: cast.author.username })) : [];
-    const recentCastsList = Array.isArray(recentCasts) ? recentCasts.map(cast => ({ text: cast.text, timestamp: cast.timestamp, author: cast.author.username })) : [];
+  //   // Ensure that popularCasts and recentCasts are arrays before mapping
+  //   const popularCastsList = Array.isArray(popularCasts)
+  //     ? popularCasts.map(cast => ({ text: cast.text, timestamp: cast.timestamp, author: cast.author.username }))
+  //     : [];
+  //   const recentCastsList = Array.isArray(recentCasts)
+  //     ? recentCasts.map(cast => ({ text: cast.text, timestamp: cast.timestamp, author: cast.author.username }))
+  //     : [];
 
-    // Add each user profile to the list
-    allUserProfilesJson.push({
-      profile: {
-        username: profile.username,
-        displayName: profile.display_name,
-        bio: profile.profile.bio.text,
-        followerCount: profile.follower_count,
-        followingCount: profile.following_count
-      },
-      popularCasts: popularCastsList,
-      recentCasts: recentCastsList
-    });
-  }
+  //   // Add each user profile to the list
+  //   allUserProfilesJson.push({
+  //     profile: {
+  //       username: profile.username,
+  //       displayName: profile.display_name,
+  //       bio: profile.profile.bio.text,
+  //       followerCount: profile.follower_count,
+  //       followingCount: profile.following_count,
+  //     },
+  //     popularCasts: popularCastsList,
+  //     recentCasts: recentCastsList,
+  //   });
+  // }
 
   // Convert all user profiles to a JSON string with indentation for readability
-  const userContext = JSON.stringify(allUserProfilesJson, null, 2);
+  // const userContext = JSON.stringify(allUserProfilesJson, null, 2);
 
   while (attempt < maxRetries) {
     try {
       console.warn(`[RUN THREAD] Checking for ongoing runs on thread: ${threadId} (Attempt ${attempt + 1})`);
 
       // Fetch the list of runs for the given thread
-      const runs = await openai.beta.threads.runs.list(threadId);
+      let runs = await openai.beta.threads.runs.list(threadId);
 
       // Check if there's any ongoing run
-      const inProgressRun = runs.data.find(run => run.status === 'in_progress');
+      let inProgressRun = runs.data.find(run => run.status === 'in_progress');
       
       if (inProgressRun) {
         console.log(`[RUN THREAD] Run already in progress for thread ${threadId}, waiting for it to complete...`);
@@ -246,12 +254,16 @@ async function runThread(threadId, userProfiles, authorUsername) {
       }
 
       // Check if there's a run that requires action
-      const requiresActionRun = runs.data.find(run => run.status === 'requires_action');
+      let requiresActionRun = runs.data.find(run => run.status === 'requires_action');
 
-      if (requiresActionRun) {
+      // While loop to handle all required actions sequentially
+      while (requiresActionRun) {
         console.log('[RUN THREAD] Run requires action:', threadId);
-        await handleRequiresAction(requiresActionRun, threadId);
-        continue; // Retry the run after handling required actions
+        requiresActionRun = await handleRequiresAction(requiresActionRun, threadId);
+
+        // Re-fetch runs to see if there are still any actions required
+        runs = await openai.beta.threads.runs.list(threadId);
+        requiresActionRun = runs.data.find(run => run.status === 'requires_action');
       }
 
       // If no runs in progress or requiring action, start a new run
@@ -261,8 +273,9 @@ async function runThread(threadId, userProfiles, authorUsername) {
         // instructions: `use the following user profiles as context... \n${userContext}`, // Add instructions if needed
       });
 
-      if (run.status === 'requires_action') {
-        console.log('requires action:', threadId);
+      // Handle required actions if any
+      while (run.status === 'requires_action') {
+        console.log('Run requires action:', threadId);
         run = await handleRequiresAction(run, threadId);
       }
 
@@ -387,44 +400,44 @@ async function handleWebhook(req, res) {
     const threadMessages = await farcaster.fetchFarcasterThreadData(farcasterThreadId)
 
     // Iterate over messages to gather relevant usernames
-    for (const msg of threadMessages) {
-      console.log(`Processing message from ${msg.author ? msg.author.username : 'unknown author'} with hash ${msg.hash}...`);
+    // for (const msg of threadMessages) {
+    //   console.log(`Processing message from ${msg.author ? msg.author.username : 'unknown author'} with hash ${msg.hash}...`);
       
-      // Add author username
-      if (msg.author && msg.author.username) {
-        relevantUsernames.add(msg.author.username);
-        console.log(`Added author username: ${msg.author.username}`);
-      }
+    //   // Add author username
+    //   if (msg.author && msg.author.username) {
+    //     relevantUsernames.add(msg.author.username);
+    //     console.log(`Added author username: ${msg.author.username}`);
+    //   }
 
-      // Extract tagged usernames from the message text
-      const taggedUsernames = farcaster.extractUsernames(msg.text, msg.mentioned_profiles);
-      console.log(`Extracted tagged usernames: ${taggedUsernames.join(', ')}`);
-      taggedUsernames.forEach((username) => {
-        relevantUsernames.add(username);
-        console.log(`Added tagged username: ${username}`);
-      });
+    //   // Extract tagged usernames from the message text
+    //   const taggedUsernames = farcaster.extractUsernames(msg.text, msg.mentioned_profiles);
+    //   console.log(`Extracted tagged usernames: ${taggedUsernames.join(', ')}`);
+    //   taggedUsernames.forEach((username) => {
+    //     relevantUsernames.add(username);
+    //     console.log(`Added tagged username: ${username}`);
+    //   });
 
-      // Get the user(s) that the message is replying to
-      if (msg.parent_hash) {
-        console.log(`Message has a parent hash: ${msg.parent_hash}`);
+    //   // Get the user(s) that the message is replying to
+    //   if (msg.parent_hash) {
+    //     console.log(`Message has a parent hash: ${msg.parent_hash}`);
         
-        // Fetch parent message by hash, ensuring the call is awaited
-        try {
-          const parentMsg = await farcaster.fetchMessageByHash(msg.parent_hash); // Corrected: added await to handle async function
-          if (parentMsg && parentMsg.author && parentMsg.author.username) {
-            relevantUsernames.add(parentMsg.author.username);
-            console.log(`Added fetched parent message author username: ${parentMsg.author.username}`);
-          } else {
-            console.warn(`No author found for fetched parent message with hash: ${msg.parent_hash}`);
-          }
-        } catch (error) {
-          console.error(`Error fetching parent message with hash ${msg.parent_hash}: ${error.message}`);
-        }
-      }
-    }
+    //     // Fetch parent message by hash, ensuring the call is awaited
+    //     try {
+    //       const parentMsg = await farcaster.fetchMessageByHash(msg.parent_hash); // Corrected: added await to handle async function
+    //       if (parentMsg && parentMsg.author && parentMsg.author.username) {
+    //         relevantUsernames.add(parentMsg.author.username);
+    //         console.log(`Added fetched parent message author username: ${parentMsg.author.username}`);
+    //       } else {
+    //         console.warn(`No author found for fetched parent message with hash: ${msg.parent_hash}`);
+    //       }
+    //     } catch (error) {
+    //       console.error(`Error fetching parent message with hash ${msg.parent_hash}: ${error.message}`);
+    //     }
+    //   }
+    // }
 
-    // Use the new function to load and filter relevant user profiles
-    const relevantUserProfiles = farcaster.loadAndFilterRelevantUserProfiles(relevantUsernames);
+    // // Use the new function to load and filter relevant user profiles
+    // const relevantUserProfiles = farcaster.loadAndFilterRelevantUserProfiles(relevantUsernames);
 
 
     // Check if there's already an OpenAI thread associated with this Farcaster thread
@@ -459,7 +472,7 @@ async function handleWebhook(req, res) {
       }
     } else {
       if (shouldRun) {
-      const run = await runThread(threadId, relevantUserProfiles, authorUsername); // Step 2: Include userProfiles and authorUsername
+      const run = await runThread(threadId, [], authorUsername); // Step 2: Include userProfiles and authorUsername
 
       // Check if the run has completed successfully
       if (run.status === 'completed') {
@@ -500,11 +513,11 @@ async function handleWebhook(req, res) {
       console.log(`Image generated and attached: ${imageUrl}`);
     }
 
-    // const reply = await neynarClient.publishCast(
-    //   process.env.SIGNER_UUID,
-    //   botMessage,
-    //   replyOptions
-    // );
+    const reply = await neynarClient.publishCast(
+      process.env.SIGNER_UUID,
+      botMessage,
+      replyOptions
+    );
 
     console.log('Reply sent:', botMessage);
     res.status(200).send('Webhook received and response sent!');

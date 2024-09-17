@@ -178,7 +178,7 @@ async function buildProfileOnTheFly(username) {
     // Extract the FID from the profile
     const fid = profile.fid;
 
-    // Step 2: Fetch popular and recent casts using the FID in parallel
+    //Step 2: Fetch popular and recent casts using the FID in parallel
     const [popularCasts, recentCasts] = await Promise.all([
       getPopularCasts(fid), // Fetch popular casts
       getRecentCasts(fid)   // Fetch recent casts
