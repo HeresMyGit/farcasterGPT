@@ -17,7 +17,7 @@ const openai = new OpenAI({
 // Initialize Neynar client
 const neynarClient = new NeynarAPIClient(process.env.NEYNAR_API_KEY);
 
-const RECENT_THREADS_FILE = path.resolve(__dirname, 'recent_threads.json');
+const RECENT_THREADS_FILE = path.resolve(__dirname, '../farcasterGPT-Data/recent_threads.json');
 
 // Initialize an array to hold summaries
 let summaries = [];

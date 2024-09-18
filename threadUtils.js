@@ -1,10 +1,10 @@
 const fs = require('fs');
 const path = require('path');
 
-const THREADS_FILE = path.resolve(__dirname, 'threadMappings.json');
-const RECENT_THREADS_FILE = path.resolve(__dirname, 'recent_threads.json');
-const TRENDING_SUMMARIES_FILE = path.resolve(__dirname, 'trending_summaries.json');
-const USER_PROFILES_FILE = path.resolve(__dirname, 'userProfiles.json');
+const THREADS_FILE = path.resolve(__dirname, '../farcasterGPT-Data/threadMappings.json');
+const RECENT_THREADS_FILE = path.resolve(__dirname, '../farcasterGPT-Data/recent_threads.json');
+const TRENDING_SUMMARIES_FILE = path.resolve(__dirname, '../farcasterGPT-Data/trending_summaries.json');
+const USER_PROFILES_FILE = path.resolve(__dirname, '../farcasterGPT-Data/userProfiles.json');
 
 // Load existing thread mappings from file
 function loadThreadMappings() {

@@ -14,7 +14,7 @@ const openai = new OpenAI({
   organization: process.env.OPENAI_ORG,
 });
 
-const PREVIOUS_SUMMARIES_FILE = path.resolve(__dirname, 'previous_summaries.json');
+const PREVIOUS_SUMMARIES_FILE = path.resolve(__dirname, '../farcasterGPT-Data/previous_summaries.json');
 
 // Function to read daily summaries for the current day
 function readDailySummaries() {
