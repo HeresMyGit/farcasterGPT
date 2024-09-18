@@ -44,21 +44,39 @@ async function verifyTip(messageID) {
   }
 }
 
-// Get the leaderboard of Floaty senders for a given token
-async function getFloatyLeaderboard(tokenAddress, page = 1) {
-  const url = `${BASE_URL}/floaties/sent/leaderboard/${tokenAddress}?page=${page}`;
-  console.log(`Sending request to URL: ${url}`);
-  try {
-    const response = await fetch(url);
-    if (!response.ok) {
-      throw new Error(`Failed to get Floaty leaderboard: ${response.statusText}`);
+// Helper function to adjust numbers according to the given rules with logging
+function adjustNumbers(obj) {
+  for (const key in obj) {
+    if (typeof obj[key] === 'object' && obj[key] !== null) {
+      adjustNumbers(obj[key]); // Recursively adjust numbers in nested objects
+    } else if (typeof obj[key] === 'number') {
+      if (obj[key].toString().includes('.') && obj[key].toString().split('.')[1].length > 4) {
+        // Log before and after shortening numbers to 4 decimal places
+        console.log(`Adjusting ${key}: ${obj[key]} to 4 decimal places.`);
+        obj[key] = parseFloat(obj[key].toFixed(4));
+        console.log(`Adjusted ${key}: ${obj[key]}`);
+      } else if (obj[key] >= 1e18) {
+        // Log before and after dividing numbers with over 18 non-decimal places by 10^18
+        console.log(`Adjusting ${key}: ${obj[key]} by dividing by 10^18 and shortening to 4 decimals.`);
+        obj[key] = parseFloat((obj[key] / 1e18).toFixed(4));
+        console.log(`Adjusted ${key}: ${obj[key]}`);
+      }
+    } else if (typeof obj[key] === 'string' && !isNaN(obj[key])) {
+      const num = parseFloat(obj[key]);
+      if (obj[key].includes('.') && obj[key].split('.')[1].length > 4) {
+        // Log before and after shortening string numbers to 4 decimal places
+        console.log(`Adjusting string ${key}: ${obj[key]} to 4 decimal places.`);
+        obj[key] = parseFloat(num.toFixed(4));
+        console.log(`Adjusted string ${key}: ${obj[key]}`);
+      } else if (num >= 1e18) {
+        // Log before and after dividing string numbers with over 18 non-decimal places by 10^18
+        console.log(`Adjusting string ${key}: ${obj[key]} by dividing by 10^18 and shortening to 4 decimals.`);
+        obj[key] = parseFloat((num / 1e18).toFixed(4)).toString(); // Convert back to string after adjustment
+        console.log(`Adjusted string ${key}: ${obj[key]}`);
+      }
     }
-    const data = await response.json(); // Await the JSON parsing
-    return data; // Return the resolved data
-  } catch (error) {
-    console.error(`Error fetching Floaty leaderboard for token address ${tokenAddress}:`, error);
-    return { error: "something went wrong" }; // Return an error message on failure
   }
+  return obj;
 }
 
 // Get tip information for a given FID
@@ -77,9 +95,43 @@ async function getUserHamInfo(FID) {
       throw new Error(`Failed to get user HAM info: ${response.statusText}`);
     }
     const data = await response.json(); // Await the JSON parsing
-    return data; // Return the resolved data
+    return adjustNumbers(data); // Return the resolved and adjusted data
   } catch (error) {
     console.error(`Error fetching HAM info for FID ${resolvedFID}:`, error);
+    return { error: "something went wrong" }; // Return an error message on failure
+  }
+}
+
+// Returns the Ham list leaderboard in a paginated list format
+async function getHamScores(page = 1) {
+  const url = `${BASE_URL}/ham/ham-scores?page=${page}`;
+  console.log(`Sending request to URL: ${url}`);
+  try {
+    const response = await fetch(url);
+    if (!response.ok) {
+      throw new Error(`Failed to get Ham scores: ${response.statusText}`);
+    }
+    const data = await response.json(); // Await the JSON parsing
+    return adjustNumbers(data); // Return the resolved and adjusted data
+  } catch (error) {
+    console.error('Error fetching Ham scores:', error);
+    return { error: "something went wrong" }; // Return an error message on failure
+  }
+}
+
+// Get the leaderboard of Floaty senders for a given token
+async function getFloatyLeaderboard(tokenAddress, page = 1) {
+  const url = `${BASE_URL}/floaties/sent/leaderboard/${tokenAddress}?page=${page}`;
+  console.log(`Sending request to URL: ${url}`);
+  try {
+    const response = await fetch(url);
+    if (!response.ok) {
+      throw new Error(`Failed to get Floaty leaderboard: ${response.statusText}`);
+    }
+    const data = await response.json(); // Await the JSON parsing
+    return data; // Return the resolved data
+  } catch (error) {
+    console.error(`Error fetching Floaty leaderboard for token address ${tokenAddress}:`, error);
     return { error: "something went wrong" }; // Return an error message on failure
   }
 }
@@ -153,23 +205,6 @@ async function getFloatyBalancesByFID(fid) {
     return data; // Return the resolved data
   } catch (error) {
     console.error(`Error fetching Floaty balances for FID ${resolvedFID}:`, error);
-    return { error: "something went wrong" }; // Return an error message on failure
-  }
-}
-
-// Returns the Ham list leaderboard in a paginated list format
-async function getHamScores(page = 1) {
-  const url = `${BASE_URL}/ham/ham-scores?page=${page}`;
-  console.log(`Sending request to URL: ${url}`);
-  try {
-    const response = await fetch(url);
-    if (!response.ok) {
-      throw new Error(`Failed to get Ham scores: ${response.statusText}`);
-    }
-    const data = await response.json(); // Await the JSON parsing
-    return data; // Return the resolved data
-  } catch (error) {
-    console.error('Error fetching Ham scores:', error);
     return { error: "something went wrong" }; // Return an error message on failure
   }
 }
