@@ -379,7 +379,7 @@ async function handleWebhook(req, res) {
 
     // Step 2: Add the initial user message to the thread
     // await createMessage(threadId, castText);
-    await createMessage(threadId, `Farcaster thread history: ${conversationContext}\n\n------\n\nLatest cast from ${hookData.data.author.username}: ${castText}`);
+    await createMessage(threadId, `First, look up this thread to get context.  Always do this in case there have been more messages since you last interacted: Farcaster message hash: ${messageHash}\n\n------\n\nNow, respond to the latest cast from ${hookData.data.author.username}: ${castText}`);
 
     // Step 3: Run the Assistant on the thread
     const shouldRun = true; // Replace with your logic if needed
