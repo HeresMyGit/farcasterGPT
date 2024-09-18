@@ -71,7 +71,7 @@ async function fetchFarcasterThreadMessages(castHash) {
 
 async function fetchFarcasterThreadData(castHash) {
   console.warn(`fetch farcaster thread messages: ${castHash}`);
-  const url = `https://api.neynar.com/v2/farcaster/cast/conversation?identifier=${castHash}&type=hash&reply_depth=2&include_chronological_parent_casts=false&limit=20`;
+  const url = `https://api.neynar.com/v2/farcaster/cast/conversation?identifier=${castHash}&type=hash&reply_depth=4&include_chronological_parent_casts=true&limit=20`;
   const options = {
     method: 'GET',
     headers: {
@@ -199,7 +199,8 @@ async function buildProfileOnTheFly(username, shouldFetchLatestCasts = false, sh
         verifications: profile.verifications,
         verifiedAddresses: profile.verified_addresses,
         activeStatus: profile.active_status,
-        powerBadge: profile.power_badge
+        powerBadge: profile.power_badge,
+        fid: profile.fid
       },
       popularCasts: popularCasts.map(cast => ({
         text: cast.text,

@@ -8,6 +8,7 @@ const {
   saveOpenAIThreadId,
 } = require('./threadUtils');
 const farcaster = require('./farcaster');
+const ham = require('./ham');
 const axios = require('axios');
 const FormData = require('form-data');
 
@@ -60,6 +61,32 @@ async function handleRequiresAction(run, threadId) {
           return {
             tool_call_id: tool.id,
             output: JSON.stringify(channelDetails), // Format the fetched channel details
+          };
+        } else if (tool.function.name === "fetch_ham_details") {
+          // Extract the FID parameter and fetch the HAM info
+          const { FID } = JSON.parse(tool.function.arguments);
+
+          // Generate HAM info on the fly
+          console.warn(`Fetching HAM info on the fly for FID: ${FID}...`);
+          const hamInfo = await ham.getUserHamInfo(FID);
+          console.log(`Fetched HAM info on the fly for FID: ${FID}.`);
+
+          return {
+            tool_call_id: tool.id,
+            output: JSON.stringify(hamInfo), // Format the fetched HAM info
+          };
+        } else if (tool.function.name === "fetch_ham_leaderboard") {
+          // Extract the page parameter, defaulting to 1 if not provided
+          const { page = 1 } = JSON.parse(tool.function.arguments);
+
+          // Fetch Ham scores on the fly
+          console.warn(`Fetching Ham scores for page: ${page}...`);
+          const hamScores = await ham.getHamScores(page);
+          console.log(`Fetched Ham scores for page: ${page}.`);
+
+          return {
+            tool_call_id: tool.id,
+            output: JSON.stringify(hamScores), // Format the fetched Ham scores
           };
         }
         // Add other function handlers if necessary
@@ -513,6 +540,8 @@ async function handleWebhook(req, res) {
       console.log(`Image generated and attached: ${imageUrl}`);
     }
 
+    botMessage = replaceHam(10, botMessage)
+
     // Check if the botMessage exceeds the 768 character limit
     const maxChunkSize = 768;
     const messageChunks = splitMessageIntoChunks(botMessage, maxChunkSize);
@@ -562,6 +591,23 @@ function splitMessageIntoChunks(message, maxChunkSize) {
   return chunks;
 }
 
+function replaceHam(maxHam, text) {
+  // Replace 🍖x100 or 🍖 x100 where 100 > maxHam
+  text = text.replace(/🍖\s*x\s*(\d+)/g, (match, p1) => {
+    return parseInt(p1) > maxHam ? `[HAM] x${p1}` : match;
+  });
+
+  // Count the total instances of 🍖
+  let hamCount = 0;
+
+  // Replace extra 🍖 emojis with [HAM]
+  text = text.replace(/🍖/g, () => {
+    hamCount++;
+    return hamCount > maxHam ? '[HAM]' : '🍖';
+  });
+
+  return text;
+}
 
 module.exports = {
   handleRequiresAction,
