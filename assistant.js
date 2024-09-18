@@ -7,6 +7,8 @@ const {
   getOpenAIThreadId,
   saveOpenAIThreadId,
 } = require('./threadUtils');
+const { getMferDescription } = require('./mfer.js');
+const { generateImage } = require('./image.js');
 const farcaster = require('./farcaster');
 const ham = require('./ham');
 const axios = require('axios');
@@ -176,6 +178,48 @@ async function handleRequiresAction(run, threadId) {
               output: JSON.stringify({ error: error.message })
             };
           }
+        } else if (tool.function.name === "fetch_mfer_description") {
+          // Extract the mferID parameter
+          const { mferID } = JSON.parse(tool.function.arguments);
+
+          // Validate the mferID
+          if (mferID < 0 || mferID > 10020) {
+            return {
+              tool_call_id: tool.id,
+              output: JSON.stringify({ error: "Invalid mfer ID provided. Must be between 0 and 10020." })
+            };
+          }
+
+          // Fetch the mfer description and generate the image
+          console.warn(`Fetching mfer description and generating image for ID: ${mferID}...`);
+          const mferData = await getMferDescription(mferID);
+
+          // Return the description and image
+          return {
+            tool_call_id: tool.id,
+            output: JSON.stringify(mferData) // Return the mfer data, including traits and image
+          };
+        } else if (tool.function.name === "generate_image") {
+          // Extract the prompt parameter
+          const { prompt } = JSON.parse(tool.function.arguments);
+
+          // Validate that the prompt is a non-empty string
+          if (!prompt || typeof prompt !== "string") {
+            return {
+              tool_call_id: tool.id,
+              output: JSON.stringify({ error: "Invalid prompt provided. Please provide a valid string." })
+            };
+          }
+
+          // Call the image generation function (shell implementation for now)
+          console.warn(`Generating image based on prompt: ${prompt}...`);
+          const imageData = await generateImage(prompt); // Placeholder for actual image generation logic
+          console.warn(`Generated image based on prompt: ${prompt}...`);
+
+          return {
+            tool_call_id: tool.id,
+            output: JSON.stringify(imageData) 
+          };
         }
         // Add other function handlers if necessary
       })
@@ -349,74 +393,6 @@ async function runThread(threadId, authorUsername) {
   }
 
   console.error('Max retries reached. Failed to complete the assistant run.');
-}
-
-async function generateImage(threadId, castText) {
-  try {
-    console.log('Image generation requested.');
-
-    // Step 1: Check for all #mfer[id] patterns and fetch the descriptions
-    const mferPattern = /#mfer(\d+)/g; // Use global flag to match all occurrences
-    const matches = [...castText.matchAll(mferPattern)]; // Get all matches
-
-    if (matches.length > 0) {
-      // Fetch descriptions for all matched mfer IDs
-      const fetchDescriptions = matches.map(async match => {
-        const mferId = match[1]; // Extract the mfer ID from each match
-        try {
-          const response = await axios.get(`https://gpt.mfers.dev/descriptions/${mferId}.json`);
-          return { id: mferId, description: response.data.description };
-        } catch (fetchError) {
-          console.error(`Error fetching mfer description for ID ${mferId}: ${fetchError.message}`);
-          return { id: mferId, description: `mfer ${mferId}` }; // Fallback to generic description if fetch fails
-        }
-      });
-
-      // Resolve all promises and replace the hashtags with their descriptions
-      const descriptions = await Promise.all(fetchDescriptions);
-      descriptions.forEach(({ id, description }) => {
-        castText = castText.replace(new RegExp(`#mfer${id}`, 'g'), description);
-      });
-
-      console.log(`Modified cast text with descriptions: ${castText}`);
-    }
-
-    // Step 2: Create an image prompt based on the user's message
-    const imagePrompt = `${castText.replace('#generateimage', '').trim()}`;
-
-    // Step 3: Generate the image using the prompt
-    const imageResponse = await openai.images.generate({
-      prompt: imagePrompt,
-      n: 1,
-      size: "1024x1024",
-      model: "dall-e-3",
-      response_format: "b64_json", // Get the image data in base64 format
-    });
-
-    const imageBase64 = imageResponse.data[0].b64_json;
-
-    // Step 4: Upload the image to FreeImage.host
-    const FormData = require('form-data');
-    const formData = new FormData();
-    formData.append('key', process.env.FREEIMAGE_API_KEY); // Your API key for FreeImage.host
-    formData.append('action', 'upload');
-    formData.append('source', imageBase64);
-    formData.append('format', 'json');
-
-    const uploadResponse = await axios.post('https://freeimage.host/api/1/upload', formData, {
-      headers: formData.getHeaders(),
-    });
-
-    // Extract the image URL from the response
-    // const imageUrl = uploadResponse.data.image.url.full;
-    const imageUrl = uploadResponse.data.image.url; // Full-size image
-    console.log(`Image generated and uploaded. URL: ${imageUrl}`);
-
-    return imageUrl;
-  } catch (error) {
-    console.error('Error generating image:', error);
-    return null;
-  }
 }
 
 // Moved the webhook handler code into a separate function
