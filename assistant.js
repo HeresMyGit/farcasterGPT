@@ -63,48 +63,30 @@ async function handleRequiresAction(run, threadId) {
             output: JSON.stringify(channelDetails), // Format the fetched channel details
           };
         } else if (tool.function.name === "fetch_ham_details") {
-          // Extract the operation and relevant parameters from the arguments
-          const { operation, messageID, tokenAddress, page, FID, address } = JSON.parse(tool.function.arguments);
-          
-          // Handle different operations by calling appropriate functions from ham.js
-          let result;
-          try {
-            switch (operation) {
-              case "verify_tip":
-                result = await ham.verifyTip(messageID);
-                break;
-              case "get_floaty_leaderboard":
-                result = await ham.getFloatyLeaderboard(tokenAddress, page);
-                break;
-              case "get_user_ham_info":
-                result = await ham.getUserHamInfo(FID);
-                break;
-              case "get_floaties_leaderboard":
-                result = await ham.getFloatiesLeaderboard();
-                break;
-              case "get_floaty_receivers_leaderboard":
-                result = await ham.getFloatyReceiversLeaderboard(tokenAddress, page);
-                break;
-              case "get_floaty_balances_by_address":
-                result = await ham.getFloatyBalancesByAddress(address);
-                break;
-              case "get_floaty_balances_by_fid":
-                result = await ham.getFloatyBalancesByFID(FID);
-                break;
-              case "get_ham_scores":
-                result = await ham.getHamScores(page);
-                break;
-              default:
-                console.warn(`Unsupported operation: ${operation}`);
-                result = { error: `Unsupported operation: ${operation}` };
-            }
-          } catch (error) {
-            console.error(`Error processing operation ${operation}:`, error);
-            result = { error: error.message };
-          }
+          // Extract the FID parameter and fetch the HAM info
+          const { FID } = JSON.parse(tool.function.arguments);
+
+          // Generate HAM info on the fly
+          console.warn(`Fetching HAM info on the fly for FID: ${FID}...`);
+          const hamInfo = await ham.getUserHamInfo(FID);
+          console.log(`Fetched HAM info on the fly for FID: ${FID}.`);
+
           return {
             tool_call_id: tool.id,
-            output: JSON.stringify(result), // Format the fetched channel details
+            output: JSON.stringify(hamInfo), // Format the fetched HAM info
+          };
+        } else if (tool.function.name === "fetch_ham_leaderboard") {
+          // Extract the page parameter, defaulting to 1 if not provided
+          const { page = 1 } = JSON.parse(tool.function.arguments);
+
+          // Fetch Ham scores on the fly
+          console.warn(`Fetching Ham scores for page: ${page}...`);
+          const hamScores = await ham.getHamScores(page);
+          console.log(`Fetched Ham scores for page: ${page}.`);
+
+          return {
+            tool_call_id: tool.id,
+            output: JSON.stringify(hamScores), // Format the fetched Ham scores
           };
         }
         // Add other function handlers if necessary
@@ -545,11 +527,13 @@ async function handleWebhook(req, res) {
       console.log(`Image generated and attached: ${imageUrl}`);
     }
 
-    // const reply = await neynarClient.publishCast(
-    //   process.env.SIGNER_UUID,
-    //   botMessage,
-    //   replyOptions
-    // );
+    botMessage = replaceHam(10, botMessage)
+
+    const reply = await neynarClient.publishCast(
+      process.env.SIGNER_UUID,
+      botMessage,
+      replyOptions
+    );
 
     console.log('Reply sent:', botMessage);
     res.status(200).send('Webhook received and response sent!');
@@ -557,6 +541,24 @@ async function handleWebhook(req, res) {
     console.error('Error processing webhook:', error);
     res.status(500).send('Server error');
   }
+}
+
+function replaceHam(maxHam, text) {
+  // Replace 🍖x100 or 🍖 x100 where 100 > maxHam
+  text = text.replace(/🍖\s*x\s*(\d+)/g, (match, p1) => {
+    return parseInt(p1) > maxHam ? `[HAM] x${p1}` : match;
+  });
+
+  // Count the total instances of 🍖
+  let hamCount = 0;
+
+  // Replace extra 🍖 emojis with [HAM]
+  text = text.replace(/🍖/g, () => {
+    hamCount++;
+    return hamCount > maxHam ? '[HAM]' : '🍖';
+  });
+
+  return text;
 }
 
 module.exports = {
