@@ -362,8 +362,6 @@ async function handleWebhook(req, res) {
     // Add the message hash to the cache to avoid duplicate replies
     repliedMessageHashes.add(messageHash);
 
-    const conversationContext = await farcaster.fetchFarcasterThreadMessages(farcasterThreadId);
-
     // Check if there's already an OpenAI thread associated with this Farcaster thread
     let threadId = getOpenAIThreadId(farcasterThreadId);
 
@@ -382,7 +380,6 @@ async function handleWebhook(req, res) {
     await createMessage(threadId, `First, look up this thread to get context.  Always do this in case there have been more messages since you last interacted: Farcaster message hash: ${messageHash}\n\n------\n\nNow, respond to the latest cast from ${hookData.data.author.username}: ${castText}`);
 
     // Step 3: Run the Assistant on the thread
-    const shouldRun = true; // Replace with your logic if needed
     let botMessage = 'Sorry, I couldn’t complete the request at this time.';
     let imageUrl = null;
 
@@ -395,7 +392,6 @@ async function handleWebhook(req, res) {
         botMessage = 'no luck, try again'
       }
     } else {
-      if (shouldRun) {
       const run = await runThread(threadId, authorUsername); // Step 2: Include userProfiles and authorUsername
 
       // Check if the run has completed successfully
@@ -424,7 +420,6 @@ async function handleWebhook(req, res) {
       } else {
         console.error(`Run did not complete successfully. Status: ${run.status}`);
       }
-    }
     }
 
     // Step 7: Reply to the cast with the Assistant's response and attach the image if generated
@@ -501,6 +496,12 @@ function replaceHam(maxHam, text) {
   text = text.replace(/🍖/g, () => {
     hamCount++;
     return hamCount > maxHam ? '[HAM]' : '🍖';
+  });
+
+  // Replace patterns like "69 $DEGEN" with "69 [DEGEN]"
+  text = text.replace(/(\d+)\s?\$([A-Za-z]+)/g, (match, num, ticker) => {
+    console.log(`Adjusting pattern "${match}" to "${num} [${ticker}]".`);
+    return `${num} [${ticker}]`;
   });
 
   return text;
