@@ -10,7 +10,81 @@ const {
   saveOpenAIThreadId,
 } = require('./threadUtils');
 
+// Utility function to resolve FID, assuming FID is the username if it's invalid
+async function resolveFID(FID) {
+  // Check if FID is null, 0, or non-numerical
+  if (!FID || isNaN(FID)) {
+    console.warn(`Invalid FID provided (${FID}). Assuming it is a username.`);
+    
+    try {
+      // Assume FID is actually a username and fetch the profile
+      const userProfile = await fetchUserProfile(FID); // FID used as the username here
+      if (userProfile && userProfile.fid) {
+        console.log(`Fetched FID ${userProfile.fid} for username ${FID}`);
+        return userProfile.fid; // Return the resolved FID
+      } else {
+        console.error(`Unable to fetch FID for username: ${FID}`);
+        return null;
+      }
+    } catch (error) {
+      console.error(`Error fetching profile for username ${FID}:`, error);
+      return null;
+    }
+  }
+  return FID; // Return the original FID if it's valid
+}
+
 // Farcaster-related functions
+
+async function fetchCasts({
+  q,
+  author_fid,
+  viewer_fid,
+  parent_url,
+  channel_id,
+  limit = 25,
+  cursor,
+  api_key
+}) {
+  // Construct the URL based on parameters
+  const baseURL = 'https://api.neynar.com/v2/farcaster/cast/search';
+  const url = new URL(baseURL);
+
+  author_fid = await resolveFID(author_fid)
+  viewer_fid = await resolveFID(viewer_fid)
+
+  // Append query params to the URL
+  url.searchParams.append('q', q);
+  // if (author_fid) url.searchParams.append('author_fid', author_fid);
+  if (viewer_fid) url.searchParams.append('viewer_fid', viewer_fid);
+  if (parent_url) url.searchParams.append('parent_url', parent_url);
+  if (channel_id) url.searchParams.append('channel_id', channel_id);
+  url.searchParams.append('limit', limit);
+  if (cursor) url.searchParams.append('cursor', cursor);
+
+  const options = {
+    method: 'GET',
+    headers: {
+      accept: 'application/json',
+      api_key: process.env.NEYNAR_API_KEY,
+    }
+  };
+
+console.warn(`fetch casts: ${url}`)
+
+  try {
+    const response = await fetch(url.toString(), options);
+    if (!response.ok) {
+      throw new Error(`Failed to fetch casts: ${response.statusText}`);
+    }
+
+    const data = await response.json();
+    return data;
+  } catch (error) {
+    console.error(`Error fetching casts: ${error.message}`);
+    return { error: "Something went wrong while fetching casts." };
+  }
+}
 
 // Utility function to fetch all messages in a Farcaster thread
 async function fetchFarcasterThreadMessages(castHash) {
@@ -603,4 +677,6 @@ module.exports = {
   generateUserProfile,
   updateUserProfilesFromMessages,
   loadAndFilterRelevantUserProfiles,
+  fetchCasts,
+  resolveFID,
 };

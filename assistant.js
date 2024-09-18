@@ -17,6 +17,9 @@ const FormData = require('form-data');
 // In-memory cache to track message hashes the bot has replied to
 const repliedMessageHashes = new Set();
 
+// key = runId, value = image URL
+const imageUrlMap = {};
+
 // Assistant-related functions
 
 // Function to handle required actions from the run
@@ -213,14 +216,46 @@ async function handleRequiresAction(run, threadId) {
 
           // Call the image generation function (shell implementation for now)
           console.warn(`Generating image based on prompt: ${prompt}...`);
-          const imageData = await generateImage(prompt); // Placeholder for actual image generation logic
+          const imageUrl = await generateImage(prompt); // Placeholder for actual image generation logic
           console.warn(`Generated image based on prompt: ${prompt}...`);
+
+          // Store the image url in some map for later retrieval (use threadId/runId as key)
+          imageUrlMap[run.id] = imageUrl;
 
           return {
             tool_call_id: tool.id,
-            output: JSON.stringify(imageData) 
+            output: JSON.stringify(imageUrl) 
           };
-        }
+        } else if (tool.function.name === "search_casts") {
+            // Extract the parameters from the API call
+            const { q, author_fid, viewer_fid, parent_url, channel_id, limit, cursor, api_key } = JSON.parse(tool.function.arguments);
+
+            // Validate that the required parameter 'q' is provided
+            if (!q || typeof q !== 'string') {
+              return {
+                tool_call_id: tool.id,
+                output: JSON.stringify({ error: "Query parameter 'q' is required and must be a string." })
+              };
+            }
+
+            // Fetch the casts using the fetchCasts function
+            const castData = await farcaster.fetchCasts({
+              q,
+              author_fid,
+              viewer_fid,
+              parent_url,
+              channel_id,
+              limit,
+              cursor,
+              api_key
+            });
+
+            // Return the fetched data
+            return {
+              tool_call_id: tool.id,
+              output: JSON.stringify(castData)
+            };
+          }
         // Add other function handlers if necessary
       })
     );
@@ -439,45 +474,34 @@ async function handleWebhook(req, res) {
 
     // Step 3: Run the Assistant on the thread
     let botMessage = 'Sorry, I couldn’t complete the request at this time.';
-    let imageUrl = null;
 
-    // Check if the message includes #generateimage
-    if (castText.includes('#generateimage')) {
-      imageUrl = await generateImage(threadId, castText);
-      if (imageUrl) {
-        botMessage = "heres ur image mfer"
-      } else {
-        botMessage = 'no luck, try again'
-      }
-    } else {
-      const run = await runThread(threadId, authorUsername); // Step 2: Include userProfiles and authorUsername
+    const run = await runThread(threadId, authorUsername); // Step 2: Include userProfiles and authorUsername
 
-      // Check if the run has completed successfully
-      if (run.status === 'completed') {
-        const messages = await openai.beta.threads.messages.list(run.thread_id);
+    // Check if the run has completed successfully
+    if (run.status === 'completed') {
+      const messages = await openai.beta.threads.messages.list(run.thread_id);
 
-        if (messages && messages.data && messages.data.length > 0) {
-          const assistantMessages = messages.data.filter(msg => msg.role === 'assistant');
+      if (messages && messages.data && messages.data.length > 0) {
+        const assistantMessages = messages.data.filter(msg => msg.role === 'assistant');
 
-          if (assistantMessages.length === 0) {
-            console.error('No assistant messages found.');
-            res.status(200).send('No assistant response generated.');
-            return;
-          }
+        if (assistantMessages.length === 0) {
+          console.error('No assistant messages found.');
+          res.status(200).send('No assistant response generated.');
+          return;
+        }
 
-          const latestAssistantMessage = assistantMessages[0]; // Get the latest message
-          if (latestAssistantMessage && latestAssistantMessage.content && latestAssistantMessage.content[0] && latestAssistantMessage.content[0].text) {
-            botMessage = latestAssistantMessage.content[0].text.value;
-            console.log(`Generated response using threadID ${threadId}`);
-          } else {
-            console.error('Assistant message content is not structured as expected.');
-          }
+        const latestAssistantMessage = assistantMessages[0]; // Get the latest message
+        if (latestAssistantMessage && latestAssistantMessage.content && latestAssistantMessage.content[0] && latestAssistantMessage.content[0].text) {
+          botMessage = latestAssistantMessage.content[0].text.value;
+          console.log(`Generated response using threadID ${threadId}`);
         } else {
-          console.error('No messages found in the thread.');
+          console.error('Assistant message content is not structured as expected.');
         }
       } else {
-        console.error(`Run did not complete successfully. Status: ${run.status}`);
+        console.error('No messages found in the thread.');
       }
+    } else {
+      console.error(`Run did not complete successfully. Status: ${run.status}`);
     }
 
     // Step 7: Reply to the cast with the Assistant's response and attach the image if generated
@@ -485,6 +509,7 @@ async function handleWebhook(req, res) {
       replyTo: messageHash, // Use the specific message hash for correct threading
     };
 
+    const imageUrl = imageUrlMap[run.id];
     if (imageUrl) {
       replyOptions.embeds = [{ url: imageUrl }];
       console.log(`Image generated and attached: ${imageUrl}`);
@@ -522,6 +547,8 @@ async function handleWebhook(req, res) {
       
       // Set the flag to false after the first chunk
       isFirstChunk = false;
+
+      delete imageUrlMap[run.id];
     }
 
     console.log('Reply sent:', botMessage);
