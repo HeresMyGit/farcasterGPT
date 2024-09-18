@@ -37,7 +37,7 @@ async function verifyTip(messageID) {
       throw new Error(`Failed to verify tip: ${response.statusText}`);
     }
     const data = await response.json(); // Await the JSON parsing
-    return data; // Return the resolved data
+    return adjustNumbers(data); // Return the resolved and adjusted data
   } catch (error) {
     console.error(`Error verifying tip for message ID ${messageID}:`, error);
     return { error: "something went wrong" }; // Return an error message on failure
@@ -74,12 +74,6 @@ function adjustNumbers(obj) {
         obj[key] = parseFloat((num / 1e18).toFixed(4)).toString(); // Convert back to string after adjustment
         console.log(`Adjusted string ${key}: ${obj[key]}`);
       }
-    } else if (typeof obj[key] === 'string') {
-      // Check for patterns like "69 $DEGEN" and adjust
-      obj[key] = obj[key].replace(/(\d+)\s?\$([A-Za-z]+)/g, (match, num, ticker) => {
-        console.log(`Adjusting pattern "${match}" to "${num} [${ticker}]".`);
-        return `${num} [${ticker}]`;
-      });
     }
   }
   return obj;
@@ -135,7 +129,7 @@ async function getFloatyLeaderboard(tokenAddress, page = 1) {
       throw new Error(`Failed to get Floaty leaderboard: ${response.statusText}`);
     }
     const data = await response.json(); // Await the JSON parsing
-    return data; // Return the resolved data
+    return adjustNumbers(data); // Return the resolved and adjusted data
   } catch (error) {
     console.error(`Error fetching Floaty leaderboard for token address ${tokenAddress}:`, error);
     return { error: "something went wrong" }; // Return an error message on failure
@@ -152,7 +146,7 @@ async function getFloatiesLeaderboard() {
       throw new Error(`Failed to get Floaties leaderboard: ${response.statusText}`);
     }
     const data = await response.json(); // Await the JSON parsing
-    return data; // Return the resolved data
+    return adjustNumbers(data); // Return the resolved and adjusted data
   } catch (error) {
     console.error('Error fetching Floaties leaderboard:', error);
     return { error: "something went wrong" }; // Return an error message on failure
@@ -169,7 +163,7 @@ async function getFloatyReceiversLeaderboard(tokenAddress, page = 1) {
       throw new Error(`Failed to get Floaty receivers leaderboard: ${response.statusText}`);
     }
     const data = await response.json(); // Await the JSON parsing
-    return data; // Return the resolved data
+    return adjustNumbers(data); // Return the resolved and adjusted data
   } catch (error) {
     console.error(`Error fetching Floaty receivers leaderboard for token address ${tokenAddress}:`, error);
     return { error: "something went wrong" }; // Return an error message on failure
@@ -186,7 +180,7 @@ async function getFloatyBalancesByAddress(address) {
       throw new Error(`Failed to get Floaty balances by address: ${response.statusText}`);
     }
     const data = await response.json(); // Await the JSON parsing
-    return data; // Return the resolved data
+    return adjustNumbers(data); // Return the resolved and adjusted data
   } catch (error) {
     console.error(`Error fetching Floaty balances for address ${address}:`, error);
     return { error: "something went wrong" }; // Return an error message on failure
@@ -208,7 +202,7 @@ async function getFloatyBalancesByFID(fid) {
       throw new Error(`Failed to get Floaty balances by FID: ${response.statusText}`);
     }
     const data = await response.json(); // Await the JSON parsing
-    return data; // Return the resolved data
+    return adjustNumbers(data); // Return the resolved and adjusted data
   } catch (error) {
     console.error(`Error fetching Floaty balances for FID ${resolvedFID}:`, error);
     return { error: "something went wrong" }; // Return an error message on failure

@@ -94,6 +94,88 @@ async function handleRequiresAction(run, threadId) {
             tool_call_id: tool.id,
             output: JSON.stringify(threadData), // Format the fetched thread data
           };
+        } else if (tool.function.name === "fetch_floaty_leaderboard") {
+          // Extract the tokenAddress and page parameters
+          const { tokenAddress, page } = JSON.parse(tool.function.arguments);
+
+          // Handle default value for page if it's not provided
+          const pageNumber = page || 1;
+
+          // Fetch Floaty leaderboard for the given tokenAddress
+          console.warn(`Fetching Floaty leaderboard for token address: ${tokenAddress}, page: ${pageNumber}`);
+          const leaderboard = await ham.getFloatyLeaderboard(tokenAddress, pageNumber);
+          console.warn(`Fetched Floaty leaderboard for token address: ${tokenAddress}, page: ${pageNumber}`);
+
+          return {
+            tool_call_id: tool.id,
+            output: JSON.stringify(leaderboard) // Return the leaderboard
+          };
+        } else if (tool.function.name === "fetch_floaties_leaderboard") {
+          // Fetch Floaties leaderboard for all supported coins
+          console.warn(`Fetching Floaties leaderboard for all coins...`);
+          const leaderboard = await ham.getFloatiesLeaderboard();
+          console.warn(`Fetched Floaties leaderboard for all coins...`);
+
+          return {
+            tool_call_id: tool.id,
+            output: JSON.stringify(leaderboard) // Return the leaderboard
+          };
+        } else if (tool.function.name === "fetch_floaty_receivers_leaderboard") {
+          // Extract the tokenAddress and page parameters
+          const { tokenAddress, page } = JSON.parse(tool.function.arguments);
+
+          // Handle default value for page if it's not provided
+          const pageNumber = page || 1;
+
+          // Fetch Floaty receivers leaderboard for the given tokenAddress
+          console.warn(`Fetching Floaty receivers leaderboard for token address: ${tokenAddress}, page: ${pageNumber}`);
+          const leaderboard = await ham.getFloatyReceiversLeaderboard(tokenAddress, pageNumber);
+          console.warn(`Fetched Floaty receivers leaderboard for token address: ${tokenAddress}, page: ${pageNumber}`);
+
+          return {
+            tool_call_id: tool.id,
+            output: JSON.stringify(leaderboard) // Return the receivers leaderboard
+          };
+        } else if (tool.function.name === "fetch_floaty_balances") {
+          // Extract the address and fid parameters
+          const { address, fid } = JSON.parse(tool.function.arguments);
+
+          let balances;
+
+          try {
+            // Ensure that either address or fid is provided, but not both
+            if (address && fid) {
+              throw new Error("Provide either 'address' or 'fid', but not both.");
+            } else if (address) {
+              // Fetch balances by Ethereum address if provided
+              console.warn(`Fetching Floaty balances for Ethereum address: ${address}`);
+              balances = await ham.getFloatyBalancesByAddress(address);
+              console.warn(`Fetched Floaty balances for Ethereum address: ${address}`);
+            } else if (fid) {
+              // Fetch balances by FID if provided
+              console.warn(`Fetching Floaty balances for FID: ${fid}`);
+              balances = await ham.getFloatyBalancesByFID(fid);
+              console.warn(`Fetched Floaty balances for FID: ${fid}`);
+            } else {
+              // If neither is provided, throw an error
+              throw new Error("Either 'address' or 'fid' must be provided.");
+            }
+
+            // Return the balances if fetched successfully
+            return {
+              tool_call_id: tool.id,
+              output: JSON.stringify(balances) // Return the fetched balances
+            };
+
+          } catch (error) {
+            console.error(`Error fetching Floaty balances: ${error.message}`);
+            
+            // Return an error message in case of failure
+            return {
+              tool_call_id: tool.id,
+              output: JSON.stringify({ error: error.message })
+            };
+          }
         }
         // Add other function handlers if necessary
       })
@@ -513,5 +595,6 @@ module.exports = {
   createMessage,
   runThread,
   generateImage,
-  handleWebhook, // Export the webhook handler
+  handleWebhook,
+  splitMessageIntoChunks,
 };
