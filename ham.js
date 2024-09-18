@@ -74,6 +74,12 @@ function adjustNumbers(obj) {
         obj[key] = parseFloat((num / 1e18).toFixed(4)).toString(); // Convert back to string after adjustment
         console.log(`Adjusted string ${key}: ${obj[key]}`);
       }
+    } else if (typeof obj[key] === 'string') {
+      // Check for patterns like "69 $DEGEN" and adjust
+      obj[key] = obj[key].replace(/(\d+)\s?\$([A-Za-z]+)/g, (match, num, ticker) => {
+        console.log(`Adjusting pattern "${match}" to "${num} [${ticker}]".`);
+        return `${num} [${ticker}]`;
+      });
     }
   }
   return obj;

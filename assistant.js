@@ -35,16 +35,9 @@ async function handleRequiresAction(run, threadId) {
           const relevantUserProfiles = farcaster.loadAndFilterRelevantUserProfiles([username]);
 
           // Check if we have the relevant profile loaded; if not, generate on the fly
-          let userProfile;
-          // if (relevantUserProfiles && Object.keys(relevantUserProfiles).length > 0) {
-          //   userProfile = relevantUserProfiles[username];
-          //   console.log(`Loaded profile for ${username} from cache.`);
-          // } else {
-          // Step 2: Generate the profile on the fly if not found
           console.warn(`Generating profile on the fly for ${username}...`);
-          userProfile = await farcaster.buildProfileOnTheFly(username, shouldFetchLatestCasts, shouldFetchPopularCasts);
+          let userProfile = await farcaster.buildProfileOnTheFly(username, shouldFetchLatestCasts, shouldFetchPopularCasts);
           console.log(`Generated profile on the fly for ${username}.`);
-          // }
           return {
             tool_call_id: tool.id,
             output: JSON.stringify(userProfile), // Format the fetched profile data
@@ -87,6 +80,19 @@ async function handleRequiresAction(run, threadId) {
           return {
             tool_call_id: tool.id,
             output: JSON.stringify(hamScores), // Format the fetched Ham scores
+          };
+        } else if (tool.function.name === "fetch_thread_details") {
+          // Extract the cast and type parameters
+          const { cast, type } = JSON.parse(tool.function.arguments);
+
+          // Fetch Farcaster thread on the fly
+          console.warn(`Fetching Farcaster thread messages for cast identifier: ${cast} with type: ${type}...`);
+          const threadData = await farcaster.fetchFarcasterThread(cast, type);
+          console.log(`Fetched Farcaster thread messages for cast identifier: ${cast} with type: ${type}.`);
+
+          return {
+            tool_call_id: tool.id,
+            output: JSON.stringify(threadData), // Format the fetched thread data
           };
         }
         // Add other function handlers if necessary
@@ -197,72 +203,9 @@ async function createMessage(threadId, userMessage) {
 }
 
 // Utility function to run the Assistant on a thread with retry logic
-async function runThread(threadId, userProfiles, authorUsername) {
+async function runThread(threadId, authorUsername) {
   const maxRetries = 10; // Set a maximum number of retries
   let attempt = 0;
-
-  // Create a structured JSON object for all user profiles, ensuring the author's profile comes first
-  let allUserProfilesJson = [];
-
-  // Add the author's profile first, if it exists
-  // if (userProfiles[authorUsername]) {
-  //   const authorProfile = userProfiles[authorUsername];
-  //   const { profile, popularCasts, recentCasts } = authorProfile;
-
-  //   // Ensure that popularCasts and recentCasts are arrays before mapping
-  //   const popularCastsList = Array.isArray(popularCasts)
-  //     ? popularCasts.map(cast => ({ text: cast.text, timestamp: cast.timestamp, author: cast.author.username }))
-  //     : [];
-  //   const recentCastsList = Array.isArray(recentCasts)
-  //     ? recentCasts.map(cast => ({ text: cast.text, timestamp: cast.timestamp, author: cast.author.username }))
-  //     : [];
-
-  //   // Add the author's profile to the list first
-  //   allUserProfilesJson.push({
-  //     profile: {
-  //       username: profile.username,
-  //       displayName: profile.display_name,
-  //       bio: profile.profile.bio.text,
-  //       followerCount: profile.follower_count,
-  //       followingCount: profile.following_count,
-  //     },
-  //     popularCasts: popularCastsList,
-  //     recentCasts: recentCastsList,
-  //   });
-  // } else {
-  //   console.warn(`No user profile found for the author ${authorUsername}.`);
-  // }
-
-  // Add the other user profiles, skipping the author's profile since it's already added
-  // for (const [username, userProfile] of Object.entries(userProfiles)) {
-  //   if (username === authorUsername) continue; // Skip the author's profile as it's already added
-
-  //   const { profile, popularCasts, recentCasts } = userProfile;
-
-  //   // Ensure that popularCasts and recentCasts are arrays before mapping
-  //   const popularCastsList = Array.isArray(popularCasts)
-  //     ? popularCasts.map(cast => ({ text: cast.text, timestamp: cast.timestamp, author: cast.author.username }))
-  //     : [];
-  //   const recentCastsList = Array.isArray(recentCasts)
-  //     ? recentCasts.map(cast => ({ text: cast.text, timestamp: cast.timestamp, author: cast.author.username }))
-  //     : [];
-
-  //   // Add each user profile to the list
-  //   allUserProfilesJson.push({
-  //     profile: {
-  //       username: profile.username,
-  //       displayName: profile.display_name,
-  //       bio: profile.profile.bio.text,
-  //       followerCount: profile.follower_count,
-  //       followingCount: profile.following_count,
-  //     },
-  //     popularCasts: popularCastsList,
-  //     recentCasts: recentCastsList,
-  //   });
-  // }
-
-  // Convert all user profiles to a JSON string with indentation for readability
-  // const userContext = JSON.stringify(allUserProfilesJson, null, 2);
 
   while (attempt < maxRetries) {
     try {
@@ -421,52 +364,6 @@ async function handleWebhook(req, res) {
 
     const conversationContext = await farcaster.fetchFarcasterThreadMessages(farcasterThreadId);
 
-    // Collect relevant usernames from messages (author, mentions, replies)
-    const relevantUsernames = new Set();
-
-    const threadMessages = await farcaster.fetchFarcasterThreadData(farcasterThreadId)
-
-    // Iterate over messages to gather relevant usernames
-    // for (const msg of threadMessages) {
-    //   console.log(`Processing message from ${msg.author ? msg.author.username : 'unknown author'} with hash ${msg.hash}...`);
-      
-    //   // Add author username
-    //   if (msg.author && msg.author.username) {
-    //     relevantUsernames.add(msg.author.username);
-    //     console.log(`Added author username: ${msg.author.username}`);
-    //   }
-
-    //   // Extract tagged usernames from the message text
-    //   const taggedUsernames = farcaster.extractUsernames(msg.text, msg.mentioned_profiles);
-    //   console.log(`Extracted tagged usernames: ${taggedUsernames.join(', ')}`);
-    //   taggedUsernames.forEach((username) => {
-    //     relevantUsernames.add(username);
-    //     console.log(`Added tagged username: ${username}`);
-    //   });
-
-    //   // Get the user(s) that the message is replying to
-    //   if (msg.parent_hash) {
-    //     console.log(`Message has a parent hash: ${msg.parent_hash}`);
-        
-    //     // Fetch parent message by hash, ensuring the call is awaited
-    //     try {
-    //       const parentMsg = await farcaster.fetchMessageByHash(msg.parent_hash); // Corrected: added await to handle async function
-    //       if (parentMsg && parentMsg.author && parentMsg.author.username) {
-    //         relevantUsernames.add(parentMsg.author.username);
-    //         console.log(`Added fetched parent message author username: ${parentMsg.author.username}`);
-    //       } else {
-    //         console.warn(`No author found for fetched parent message with hash: ${msg.parent_hash}`);
-    //       }
-    //     } catch (error) {
-    //       console.error(`Error fetching parent message with hash ${msg.parent_hash}: ${error.message}`);
-    //     }
-    //   }
-    // }
-
-    // // Use the new function to load and filter relevant user profiles
-    // const relevantUserProfiles = farcaster.loadAndFilterRelevantUserProfiles(relevantUsernames);
-
-
     // Check if there's already an OpenAI thread associated with this Farcaster thread
     let threadId = getOpenAIThreadId(farcasterThreadId);
 
@@ -499,7 +396,7 @@ async function handleWebhook(req, res) {
       }
     } else {
       if (shouldRun) {
-      const run = await runThread(threadId, [], authorUsername); // Step 2: Include userProfiles and authorUsername
+      const run = await runThread(threadId, authorUsername); // Step 2: Include userProfiles and authorUsername
 
       // Check if the run has completed successfully
       if (run.status === 'completed') {

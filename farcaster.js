@@ -69,9 +69,15 @@ async function fetchFarcasterThreadMessages(castHash) {
   }
 }
 
-async function fetchFarcasterThreadData(castHash) {
-  console.warn(`fetch farcaster thread messages: ${castHash}`);
-  const url = `https://api.neynar.com/v2/farcaster/cast/conversation?identifier=${castHash}&type=hash&reply_depth=4&include_chronological_parent_casts=true&limit=20`;
+// Function to fetch Farcaster thread messages using the cast identifier, which can be a hash or a URL
+async function fetchFarcasterThread(id, type) {
+  // URL encode the identifier to handle special characters if it's a URL
+  const encodedId = encodeURIComponent(id);
+
+  console.warn(`Fetching Farcaster thread messages: ${encodedId}`);
+  const url = `https://api.neynar.com/v2/farcaster/cast/conversation?identifier=${encodedId}&type=${type}&reply_depth=5&include_chronological_parent_casts=true&limit=50`;
+  console.warn(`Request URL: ${url}`);
+
   const options = {
     method: 'GET',
     headers: {
@@ -88,26 +94,7 @@ async function fetchFarcasterThreadData(castHash) {
 
     const data = await response.json();
 
-    // Extract the main cast and direct replies
-    const mainCast = data.conversation.cast;
-    const directReplies = mainCast.direct_replies || [];
-
-    // Recursive function to gather messages from nested replies
-    const gatherMessages = (replies) => {
-      return replies.flatMap((reply) => {
-        const nestedReplies = reply.direct_replies || [];
-        return [reply, ...gatherMessages(nestedReplies)];
-      });
-    };
-
-    // Get all nested messages
-    const nestedMessages = gatherMessages(directReplies);
-
-    // Combine main cast messages and nested messages into one list
-    const combinedMessages = [mainCast, ...nestedMessages];
-
-    // Return the combined list of main cast and replies
-    return combinedMessages;
+    return data;
 
   } catch (error) {
     console.error('Error fetching thread messages:', error.message);
@@ -605,7 +592,7 @@ function loadAndFilterRelevantUserProfiles(relevantUsernames) {
 
 module.exports = {
   fetchFarcasterThreadMessages,
-  fetchFarcasterThreadData,
+  fetchFarcasterThread,
   fetchMessageByHash,
   extractUsernames,
   buildProfileOnTheFly,
