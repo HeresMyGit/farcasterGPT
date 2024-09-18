@@ -8,6 +8,7 @@ const {
   saveOpenAIThreadId,
 } = require('./threadUtils');
 const farcaster = require('./farcaster');
+const ham = require('./ham');
 const axios = require('axios');
 const FormData = require('form-data');
 
@@ -60,6 +61,50 @@ async function handleRequiresAction(run, threadId) {
           return {
             tool_call_id: tool.id,
             output: JSON.stringify(channelDetails), // Format the fetched channel details
+          };
+        } else if (tool.function.name === "fetch_ham_details") {
+          // Extract the operation and relevant parameters from the arguments
+          const { operation, messageID, tokenAddress, page, FID, address } = JSON.parse(tool.function.arguments);
+          
+          // Handle different operations by calling appropriate functions from ham.js
+          let result;
+          try {
+            switch (operation) {
+              case "verify_tip":
+                result = await ham.verifyTip(messageID);
+                break;
+              case "get_floaty_leaderboard":
+                result = await ham.getFloatyLeaderboard(tokenAddress, page);
+                break;
+              case "get_user_ham_info":
+                result = await ham.getUserHamInfo(FID);
+                break;
+              case "get_floaties_leaderboard":
+                result = await ham.getFloatiesLeaderboard();
+                break;
+              case "get_floaty_receivers_leaderboard":
+                result = await ham.getFloatyReceiversLeaderboard(tokenAddress, page);
+                break;
+              case "get_floaty_balances_by_address":
+                result = await ham.getFloatyBalancesByAddress(address);
+                break;
+              case "get_floaty_balances_by_fid":
+                result = await ham.getFloatyBalancesByFID(FID);
+                break;
+              case "get_ham_scores":
+                result = await ham.getHamScores(page);
+                break;
+              default:
+                console.warn(`Unsupported operation: ${operation}`);
+                result = { error: `Unsupported operation: ${operation}` };
+            }
+          } catch (error) {
+            console.error(`Error processing operation ${operation}:`, error);
+            result = { error: error.message };
+          }
+          return {
+            tool_call_id: tool.id,
+            output: JSON.stringify(result), // Format the fetched channel details
           };
         }
         // Add other function handlers if necessary
