@@ -84,32 +84,82 @@ function loadRecentThreads() {
   return [];
 }
 
-async function runDailySummary() {
-  const recentFarcasterThreadIds = loadRecentThreads();
+// Fetch notifications until they are all 24h old
+async function fetchRecentNotifications(cursor = '') {
+  const url = 'https://api.neynar.com/v2/farcaster/notifications?fid=853707&type=mentions&priority_mode=false';
+  const headers = { accept: 'application/json', api_key: process.env.NEYNAR_API_KEY };
 
-  for (const farcasterThreadId of recentFarcasterThreadIds) {
-    try {
-      // Get messages from Farcaster thread
-      const farcasterMessages = await fetchFarcasterThreadMessages(farcasterThreadId);
-
-      // Use mferGPT to write a summary of what happened
-      const summary = await generateSummary(farcasterMessages);
-
-      // Push the summary to the summaries array
-      summaries.push({
-        date: today,
-        farcasterThreadId,
-        summary,
-      });
-    } catch (error) {
-      console.error(`Error processing Farcaster thread: ${farcasterThreadId}:`, error);
+  const requestUrl = cursor ? `${url}&cursor=${cursor}` : url;
+  console.log(`Fetching notifications with cursor: ${cursor}`);
+  
+  try {
+    const response = await fetch(requestUrl, { method: 'GET', headers });
+    if (!response.ok) {
+      console.error(`Error fetching notifications: ${response.statusText}`);
+      return [];
     }
+
+    const data = await response.json();
+    const notifications = data.notifications;
+    const nextCursor = data.next ? data.next.cursor : null;
+
+    // Filter notifications older than 24 hours
+    const now = new Date();
+    const recentNotifications = notifications.filter(notification => {
+      const notificationDate = new Date(notification.most_recent_timestamp);
+      return (now - notificationDate) / (1000 * 60 * 60) <= 24; // within 24 hours
+    });
+
+    // Log a brief summary of each notification
+    recentNotifications.forEach((notification, index) => {
+      const author = notification.cast.author.username || 'unknown';
+      const snippet = notification.cast.text.slice(0, 30); // Log the first 30 characters of the text
+      console.log(`Notification ${index + 1}: ${author} - "${snippet}"`);
+    });
+
+    // Recursively fetch more notifications if needed
+    if (nextCursor && recentNotifications.length === notifications.length) {
+      const olderNotifications = await fetchRecentNotifications(nextCursor);
+      return recentNotifications.concat(olderNotifications);
+    }
+
+    return recentNotifications;
+
+  } catch (error) {
+    console.error('Error fetching notifications:', error.message);
+    return [];
   }
+}
 
-  // Save the summaries to the daily summary file
-  fs.writeFileSync('daily_summary.json', JSON.stringify(summaries, null, 2));
 
-  console.log('Daily summary saved to daily_summary.json');
+// Fetch and summarize threads
+async function runDailySummary() {
+  try {
+    const notifications = await fetchRecentNotifications();
+    const uniqueThreadHashes = new Set();
+    const summaries = [];
+
+    for (const notification of notifications) {
+      const threadHash = notification.cast.thread_hash;
+      if (uniqueThreadHashes.has(threadHash)) continue;
+      uniqueThreadHashes.add(threadHash);
+
+      const threadMessages = await fetchFarcasterThreadMessages(threadHash);
+      const summary = await generateSummary(threadMessages);
+
+      summaries.push({ threadHash, summary });
+    }
+
+    // Here, you would write the summarized posts using your preferred method
+    console.log('Summaries:', summaries);
+
+      // Save the summaries to the daily summary file
+    fs.writeFileSync('daily_summary.json', JSON.stringify(summaries, null, 2));
+
+    console.log('Daily summary saved to daily_summary.json');
+  } catch (error) {
+    console.error('Error summarizing threads:', error);
+  }
 }
 
 // Functions

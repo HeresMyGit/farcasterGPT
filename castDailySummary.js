@@ -23,7 +23,7 @@ function readDailySummaries() {
   const today = new Date().toISOString().split('T')[0];
 
   // Filter summaries with today's date
-  return summaries.filter(summary => summary.date === today);
+  return summaries//.filter(summary => summary.date === today);
 }
 
 // Function to read previous summaries, if any
@@ -81,7 +81,7 @@ ${todaySummariesText}
 
 Your post should be engaging and capture the main activities and topics discussed by the users and how they used mferGPT to achieve it.
 
-Keep it under 320 bytes since this will be sent in a Farcaster message, so succinct points and brevity is key. Use bullet points for topics.
+Keep it under 768 bytes since this will be sent in a Farcaster message, so succinct points and brevity is key. Use emoji bullet points for topics.
 
 The title or greeting of your post should somehow reference how these are threads mfergpt interacted with.
 
@@ -172,7 +172,7 @@ async function publishPost(content) {
 async function castDailySummary() {
   const summaries = readDailySummaries();
   const previousSummaries = readPreviousSummaries();
-
+  console.log("summaries: ", summaries)
   const dailyPostContent = await generateDailyPost(summaries, previousSummaries);
 
   // Create the formatted entry for the JSON file
@@ -229,7 +229,7 @@ ${trendingSummariesText}
 
 Your post should be engaging and capture the main activities and topics that are currently trending on Farcaster.
 
-Keep it under 320 bytes since this will be sent in a Farcaster message, so succinct points and brevity are key. Use bullet points for topics.
+Keep it under 768 bytes since this will be sent in a Farcaster message, so succinct points and brevity are key. Use emoji bullet points for topics.
 
 Post:
 `;
