@@ -2,9 +2,11 @@
 
 const fs = require('fs');
 const OpenAI = require('openai');
+const { neynarClient } = require('./client');
 const fetch = require('node-fetch'); // Include node-fetch
 const path = require('path');
 const { loadTrendingSummaries } = require('./threadUtils');
+const { splitMessageIntoChunks } = require('./assistant')
 
 require('dotenv').config();
 
@@ -139,30 +141,38 @@ Post:
 }
 
 // Function to publish the post using direct HTTP request
-async function publishPost(content) {
+async function publishPost(content, imageUrl = null) {
   try {
     const url = 'https://api.neynar.com/v2/farcaster/cast';
-    const options = {
-      method: 'POST',
-      headers: {
-        accept: 'application/json',
-        api_key: process.env.NEYNAR_API_KEY,
-        'content-type': 'application/json',
-      },
-      body: JSON.stringify({
-        signer_uuid: process.env.SIGNER_UUID,
-        text: content,
-        channel_id: 'mfergpt', // Use your channel ID
-      }),
-    };
+    const maxChunkSize = 768;
 
-    const response = await fetch(url, options);
-    const json = await response.json();
+    // Split the message into chunks if it exceeds the byte limit
+    const messageChunks = splitMessageIntoChunks(content, maxChunkSize);
 
-    if (response.ok) {
-      console.log('Post casted successfully:', json);
-    } else {
-      console.error('Error casting post:', json);
+    let previousReplyHash = null; // Used to thread the messages
+    let isFirstChunk = true;
+
+    for (const chunk of messageChunks) {
+      // Include the image URL only in the first reply if it exists
+      const currentReplyOptions = {
+        replyTo: previousReplyHash,
+        ...(isFirstChunk && imageUrl ? { embeds: [{ url: imageUrl }] } : {}), // Include image URL only in the first chunk
+      };
+
+      // Publish the cast using neynarClient
+      const reply = await neynarClient.publishCast(
+        process.env.SIGNER_UUID,  // Use the SIGNER_UUID from environment variables
+        chunk,                    // The message chunk to be sent
+        currentReplyOptions        // The reply options for threading
+      );
+
+      console.log('Reply sent:', chunk);
+
+      // Update previousReplyHash to thread subsequent messages correctly
+      previousReplyHash = reply.hash;
+
+      // Set the flag to false after the first chunk is sent
+      isFirstChunk = false;
     }
   } catch (error) {
     console.error('Error casting post:', error);
