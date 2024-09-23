@@ -9,6 +9,7 @@ const {
 } = require('./threadUtils');
 const { getMferDescription } = require('./mfer.js');
 const { generateImage } = require('./image.js');
+const { interpretUrl } = require('./attachments.js');
 const farcaster = require('./farcaster');
 const ham = require('./ham');
 const axios = require('axios');
@@ -226,7 +227,7 @@ async function handleRequiresAction(run, threadId) {
             tool_call_id: tool.id,
             output: JSON.stringify(imageUrl) 
           };
-        } else if (tool.function.name === "search_casts") {
+        } else if (tool.function.name === "search_casts" || tool.function.name === "search_casts_by_author") {
             // Extract the parameters from the API call
             const { q, author_fid, viewer_fid, parent_url, channel_id, limit, cursor, api_key } = JSON.parse(tool.function.arguments);
 
@@ -255,6 +256,18 @@ async function handleRequiresAction(run, threadId) {
               tool_call_id: tool.id,
               output: JSON.stringify(castData)
             };
+          } else if (tool.function.name === "fetch_url_details") {
+              const { url, prompt } = JSON.parse(tool.function.arguments);
+              console.warn(`Fetching description for URL: ${url}, with prompt: ${prompt || 'none'}...`);
+              
+              // Assuming there's a function fetchUrlDescription that handles URL interpretation
+              const description = await interpretUrl(url, prompt);
+              console.log(`Fetched description for URL: ${url}.`);
+
+              return {
+                tool_call_id: tool.id,
+                output: JSON.stringify({ description }), // Returning the description as JSON
+              };
           }
         // Add other function handlers if necessary
       })
@@ -534,11 +547,11 @@ async function handleWebhook(req, res) {
         ...(isFirstChunk && imageUrl ? { embeds: [{ url: imageUrl }] } : {}) // Include image URL only in the first chunk
       };
 
-      const reply = await neynarClient.publishCast(
-        process.env.SIGNER_UUID,
-        chunk,
-        currentReplyOptions
-      );
+      // const reply = await neynarClient.publishCast(
+      //   process.env.SIGNER_UUID,
+      //   chunk,
+      //   currentReplyOptions
+      // );
 
       console.log('Reply sent:', chunk);
       

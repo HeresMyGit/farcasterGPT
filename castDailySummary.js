@@ -157,6 +157,7 @@ async function publishPost(content, imageUrl = null) {
       const currentReplyOptions = {
         replyTo: previousReplyHash,
         ...(isFirstChunk && imageUrl ? { embeds: [{ url: imageUrl }] } : {}), // Include image URL only in the first chunk
+        channelId: "mfergpt",
       };
 
       // Publish the cast using neynarClient
