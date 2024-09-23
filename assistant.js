@@ -456,115 +456,115 @@ async function handleWebhook(req, res) {
     const castText = hookData.data.text;
     console.warn(`castText: ${castText}`)
 
-    const authorUsername = hookData.data.author.username;
+//     const authorUsername = hookData.data.author.username;
 
-    // Check if the bot has already replied to this message
-    if (repliedMessageHashes.has(messageHash)) {
-      console.log(`Already replied to message hash: ${messageHash}. Skipping reply.`);
-      res.status(200).send('Already replied to this message.');
-      return;
-    }
+//     // Check if the bot has already replied to this message
+//     if (repliedMessageHashes.has(messageHash)) {
+//       console.log(`Already replied to message hash: ${messageHash}. Skipping reply.`);
+//       res.status(200).send('Already replied to this message.');
+//       return;
+//     }
 
-    // Add the message hash to the cache to avoid duplicate replies
-    repliedMessageHashes.add(messageHash);
+//     // Add the message hash to the cache to avoid duplicate replies
+//     repliedMessageHashes.add(messageHash);
 
-    // Check if there's already an OpenAI thread associated with this Farcaster thread
-    let threadId = getOpenAIThreadId(farcasterThreadId);
+//     // Check if there's already an OpenAI thread associated with this Farcaster thread
+//     let threadId = getOpenAIThreadId(farcasterThreadId);
 
-    if (!threadId) {
-      // No existing OpenAI thread, create a new one
-      threadId = await createNewThread(`Response for ${hookData.data.author.username}`);
+//     if (!threadId) {
+//       // No existing OpenAI thread, create a new one
+//       threadId = await createNewThread(`Response for ${hookData.data.author.username}`);
 
-      // Save the new mapping
-      saveOpenAIThreadId(farcasterThreadId, threadId);
-    } else {
-      console.log(`Using existing OpenAI thread ID: ${threadId} for Farcaster thread ID: ${farcasterThreadId}`);
-    }
+//       // Save the new mapping
+//       saveOpenAIThreadId(farcasterThreadId, threadId);
+//     } else {
+//       console.log(`Using existing OpenAI thread ID: ${threadId} for Farcaster thread ID: ${farcasterThreadId}`);
+//     }
 
-    // Step 2: Add the initial user message to the thread
-    // await createMessage(threadId, castText);
-    await createMessage(threadId, `First, look up this thread to get context.  Always do this in case there have been more messages since you last interacted: Farcaster message hash: ${messageHash}\n\n------\n\nNow, respond to the latest cast from ${hookData.data.author.username}: ${castText}`);
+//     // Step 2: Add the initial user message to the thread
+//     // await createMessage(threadId, castText);
+//     await createMessage(threadId, `First, look up this thread to get context.  Always do this in case there have been more messages since you last interacted: Farcaster message hash: ${messageHash}\n\n------\n\nNow, respond to the latest cast from ${hookData.data.author.username}: ${castText}`);
 
-    // Step 3: Run the Assistant on the thread
-    let botMessage = 'Sorry, I couldn’t complete the request at this time.';
+//     // Step 3: Run the Assistant on the thread
+//     let botMessage = 'Sorry, I couldn’t complete the request at this time.';
 
-    const run = await runThread(threadId, authorUsername); // Step 2: Include userProfiles and authorUsername
+//     const run = await runThread(threadId, authorUsername); // Step 2: Include userProfiles and authorUsername
 
-    // Check if the run has completed successfully
-    if (run.status === 'completed') {
-      const messages = await openai.beta.threads.messages.list(run.thread_id);
+//     // Check if the run has completed successfully
+//     if (run.status === 'completed') {
+//       const messages = await openai.beta.threads.messages.list(run.thread_id);
 
-      if (messages && messages.data && messages.data.length > 0) {
-        const assistantMessages = messages.data.filter(msg => msg.role === 'assistant');
+//       if (messages && messages.data && messages.data.length > 0) {
+//         const assistantMessages = messages.data.filter(msg => msg.role === 'assistant');
 
-        if (assistantMessages.length === 0) {
-          console.error('No assistant messages found.');
-          res.status(200).send('No assistant response generated.');
-          return;
-        }
+//         if (assistantMessages.length === 0) {
+//           console.error('No assistant messages found.');
+//           res.status(200).send('No assistant response generated.');
+//           return;
+//         }
 
-        const latestAssistantMessage = assistantMessages[0]; // Get the latest message
-        if (latestAssistantMessage && latestAssistantMessage.content && latestAssistantMessage.content[0] && latestAssistantMessage.content[0].text) {
-          botMessage = latestAssistantMessage.content[0].text.value;
-          console.log(`Generated response using threadID ${threadId}`);
-        } else {
-          console.error('Assistant message content is not structured as expected.');
-        }
-      } else {
-        console.error('No messages found in the thread.');
-      }
-    } else {
-      console.error(`Run did not complete successfully. Status: ${run.status}`);
-    }
+//         const latestAssistantMessage = assistantMessages[0]; // Get the latest message
+//         if (latestAssistantMessage && latestAssistantMessage.content && latestAssistantMessage.content[0] && latestAssistantMessage.content[0].text) {
+//           botMessage = latestAssistantMessage.content[0].text.value;
+//           console.log(`Generated response using threadID ${threadId}`);
+//         } else {
+//           console.error('Assistant message content is not structured as expected.');
+//         }
+//       } else {
+//         console.error('No messages found in the thread.');
+//       }
+//     } else {
+//       console.error(`Run did not complete successfully. Status: ${run.status}`);
+//     }
 
-    // Step 7: Reply to the cast with the Assistant's response and attach the image if generated
-    const replyOptions = {
-      replyTo: messageHash, // Use the specific message hash for correct threading
-    };
+//     // Step 7: Reply to the cast with the Assistant's response and attach the image if generated
+//     const replyOptions = {
+//       replyTo: messageHash, // Use the specific message hash for correct threading
+//     };
 
-    const imageUrl = imageUrlMap[run.id];
-    if (imageUrl) {
-      replyOptions.embeds = [{ url: imageUrl }];
-      console.log(`Image generated and attached: ${imageUrl}`);
-    }
+//     const imageUrl = imageUrlMap[run.id];
+//     if (imageUrl) {
+//       replyOptions.embeds = [{ url: imageUrl }];
+//       console.log(`Image generated and attached: ${imageUrl}`);
+//     }
 
-    botMessage = replaceHam(69, botMessage)
+//     botMessage = replaceHam(69, botMessage)
 
-    // Check if the botMessage exceeds the 768 character limit
-    const maxChunkSize = 768;
-    const messageChunks = splitMessageIntoChunks(botMessage, maxChunkSize);
+//     // Check if the botMessage exceeds the 768 character limit
+//     const maxChunkSize = 768;
+//     const messageChunks = splitMessageIntoChunks(botMessage, maxChunkSize);
 
-    // Send each chunk sequentially
-    let previousReplyHash = messageHash; // Start with the original message hash for threading
+//     // Send each chunk sequentially
+//     let previousReplyHash = messageHash; // Start with the original message hash for threading
 
-    // Flag to check if the image URL needs to be included
-    let isFirstChunk = true;
+//     // Flag to check if the image URL needs to be included
+//     let isFirstChunk = true;
 
-    for (const chunk of messageChunks) {
-      // Include the image URL only in the first reply if it exists
-      const currentReplyOptions = {
-        replyTo: previousReplyHash,
-        ...(isFirstChunk && imageUrl ? { embeds: [{ url: imageUrl }] } : {}) // Include image URL only in the first chunk
-      };
+//     for (const chunk of messageChunks) {
+//       // Include the image URL only in the first reply if it exists
+//       const currentReplyOptions = {
+//         replyTo: previousReplyHash,
+//         ...(isFirstChunk && imageUrl ? { embeds: [{ url: imageUrl }] } : {}) // Include image URL only in the first chunk
+//       };
 
-      const reply = await neynarClient.publishCast(
-        process.env.SIGNER_UUID,
-        chunk,
-        currentReplyOptions
-      );
+//       const reply = await neynarClient.publishCast(
+//         process.env.SIGNER_UUID,
+//         chunk,
+//         currentReplyOptions
+//       );
 
-      console.log('Reply sent:', chunk);
+//       console.log('Reply sent:', chunk);
       
-      // Update previousReplyHash to thread subsequent messages correctly
-      previousReplyHash = reply.hash;
+//       // Update previousReplyHash to thread subsequent messages correctly
+//       previousReplyHash = reply.hash;
       
-      // Set the flag to false after the first chunk
-      isFirstChunk = false;
+//       // Set the flag to false after the first chunk
+//       isFirstChunk = false;
 
-      delete imageUrlMap[run.id];
-    }
+//       delete imageUrlMap[run.id];
+//     }
 
-    console.log('Reply sent:', botMessage);
+//     console.log('Reply sent:', botMessage);
     res.status(200).send('Webhook received and response sent!');
   } catch (error) {
     console.error('Error processing webhook:', error);
