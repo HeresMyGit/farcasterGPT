@@ -528,7 +528,7 @@ async function handleWebhook(req, res) {
       console.log(`Image generated and attached: ${imageUrl}`);
     }
 
-    botMessage = replaceHam(10, botMessage)
+    botMessage = replaceHam(69, botMessage)
 
     // Check if the botMessage exceeds the 768 character limit
     const maxChunkSize = 768;
