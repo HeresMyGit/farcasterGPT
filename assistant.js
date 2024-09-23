@@ -547,11 +547,11 @@ async function handleWebhook(req, res) {
         ...(isFirstChunk && imageUrl ? { embeds: [{ url: imageUrl }] } : {}) // Include image URL only in the first chunk
       };
 
-      // const reply = await neynarClient.publishCast(
-      //   process.env.SIGNER_UUID,
-      //   chunk,
-      //   currentReplyOptions
-      // );
+      const reply = await neynarClient.publishCast(
+        process.env.SIGNER_UUID,
+        chunk,
+        currentReplyOptions
+      );
 
       console.log('Reply sent:', chunk);
       
