@@ -488,7 +488,13 @@ async function getChannelDetails(query) {
 // Function to fetch trending Farcaster casts from a specific channel
 async function getTrendingCasts(channelId, limit = 5, timeWindow = '7d') {
   console.warn(`Fetching trending casts for channel ID: ${channelId}`);
-  const url = `https://api.neynar.com/v2/farcaster/feed/trending?limit=${limit}&time_window=${timeWindow}&channel_id=${channelId}&provider=neynar`;
+  // Base URL
+  let url = `https://api.neynar.com/v2/farcaster/feed/trending?limit=${limit}&time_window=${timeWindow}&provider=neynar`;
+
+  // Only add channelId if it's not null or undefined
+  if (channelId) {
+    url += `&channel_id=${channelId}`;
+  }
   const options = {
     method: 'GET',
     headers: {
@@ -674,6 +680,7 @@ module.exports = {
   fetchUserProfile,
   getPopularCasts,
   getRecentCasts,
+  getTrendingCasts,
   generateUserProfile,
   updateUserProfilesFromMessages,
   loadAndFilterRelevantUserProfiles,

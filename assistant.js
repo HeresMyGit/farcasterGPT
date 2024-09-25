@@ -269,6 +269,16 @@ async function handleRequiresAction(run, threadId) {
                 tool_call_id: tool.id,
                 output: JSON.stringify({ description }), // Returning the description as JSON
               };
+          } else if (tool.function.name === 'fetch_trending_casts') {
+            const { channelId, limit, timeWindow } = JSON.parse(tool.function.arguments);
+            console.log(`Fetching trending casts for channelId: ${channelId}, limit: ${limit || 5}, timeWindow: ${timeWindow || '7d'}`);
+            
+            const result = await farcaster.getTrendingCasts(channelId, limit || 5, timeWindow || '7d');
+            
+            return {
+              tool_call_id: tool.id,
+              output: JSON.stringify(result)
+            };
           }
         // Add other function handlers if necessary
       })
