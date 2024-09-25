@@ -11,6 +11,7 @@ const { getMferDescription } = require('./mfer.js');
 const { generateImage } = require('./image.js');
 const { interpretUrl } = require('./attachments.js');
 const farcaster = require('./farcaster');
+const personalPrompt = require('./personalprompt');
 const ham = require('./ham');
 const axios = require('axios');
 const FormData = require('form-data');
@@ -457,6 +458,7 @@ async function handleWebhook(req, res) {
     console.warn(`castText: ${castText}`)
 
     const authorUsername = hookData.data.author.username;
+    const authorFID = hookData.data.author.fid;
 
     // Check if the bot has already replied to this message
     if (repliedMessageHashes.has(messageHash)) {
@@ -465,8 +467,22 @@ async function handleWebhook(req, res) {
       return;
     }
 
+    console.log(`Liking the post with hash: ${messageHash}`);
+    await neynarClient.publishReactionToCast(process.env.SIGNER_UUID, "like", messageHash);
+
+    res.status(200).send('Webhook received, post liked!');
+
     // Add the message hash to the cache to avoid duplicate replies
     repliedMessageHashes.add(messageHash);
+
+    // Check if the cast contains #personalprompt
+    if (castText.includes('#personalprompt')) {
+      // Handle personal prompt
+      const prompt = castText.replace('#personalprompt', '').replace('@mfergpt', '').trim();
+      personalPrompt.setPersonalPrompt(authorFID, prompt);
+
+      console.log(`Saved personal prompt for FID ${authorFID}`);
+    }
 
     // Check if there's already an OpenAI thread associated with this Farcaster thread
     let threadId = getOpenAIThreadId(farcasterThreadId);
@@ -481,9 +497,18 @@ async function handleWebhook(req, res) {
       console.log(`Using existing OpenAI thread ID: ${threadId} for Farcaster thread ID: ${farcasterThreadId}`);
     }
 
+    const personalPromptText = personalPrompt.getPersonalPrompt(authorFID);
+
     // Step 2: Add the initial user message to the thread
     // await createMessage(threadId, castText);
-    await createMessage(threadId, `First, look up this thread to get context.  Always do this in case there have been more messages since you last interacted: Farcaster message hash: ${messageHash}\n\n------\n\nNow, respond to the latest cast from ${hookData.data.author.username}: ${castText}`);
+    let userMessage = `First, look up this thread to get context. Always do this in case there have been more messages since you last interacted: Farcaster message hash: ${messageHash}\n\n------\n\nNow, respond to the latest cast from ${authorUsername}: ${castText}`;
+
+    if (personalPromptText) {
+      userMessage = `${personalPromptText}\n\n${userMessage}`;
+      console.log(`Prepended personal prompt for FID ${authorFID}: ${personalPromptText}`);
+    }
+
+    await createMessage(threadId, userMessage);
 
     // Step 3: Run the Assistant on the thread
     let botMessage = 'Sorry, I couldn’t complete the request at this time.';
@@ -499,7 +524,7 @@ async function handleWebhook(req, res) {
 
         if (assistantMessages.length === 0) {
           console.error('No assistant messages found.');
-          res.status(200).send('No assistant response generated.');
+          // res.status(200).send('No assistant response generated.');
           return;
         }
 
@@ -565,7 +590,7 @@ async function handleWebhook(req, res) {
     }
 
     console.log('Reply sent:', botMessage);
-    res.status(200).send('Webhook received and response sent!');
+    // res.status(200).send('Webhook received and response sent!');
   } catch (error) {
     console.error('Error processing webhook:', error);
     res.status(500).send('Server error');

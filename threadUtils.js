@@ -5,6 +5,8 @@ const THREADS_FILE = path.resolve(__dirname, '../farcasterGPT-Data/threadMapping
 const RECENT_THREADS_FILE = path.resolve(__dirname, '../farcasterGPT-Data/recent_threads.json');
 const TRENDING_SUMMARIES_FILE = path.resolve(__dirname, '../farcasterGPT-Data/trending_summaries.json');
 const USER_PROFILES_FILE = path.resolve(__dirname, '../farcasterGPT-Data/userProfiles.json');
+const PERSONAL_PROMPTS_FILE = path.resolve(__dirname, '../farcasterGPT-Data/personalPrompts.json');
+
 
 // Load existing thread mappings from file
 function loadThreadMappings() {
@@ -89,6 +91,20 @@ function saveUserProfiles(profiles) {
   fs.writeFileSync(USER_PROFILES_FILE, JSON.stringify(profiles, null, 2));
 }
 
+// Load personal prompts from file
+function loadPersonalPrompts() {
+  if (fs.existsSync(PERSONAL_PROMPTS_FILE)) {
+    const data = fs.readFileSync(PERSONAL_PROMPTS_FILE, 'utf-8');
+    return JSON.parse(data);
+  }
+  return {};
+}
+
+// Save personal prompts to file
+function savePersonalPrompts(prompts) {
+  fs.writeFileSync(PERSONAL_PROMPTS_FILE, JSON.stringify(prompts, null, 2));
+}
+
 module.exports = {
   loadThreadMappings,
   saveThreadMappings,
@@ -98,4 +114,6 @@ module.exports = {
   saveTrendingSummaries,
   loadUserProfiles,
   saveUserProfiles,
+  loadPersonalPrompts,
+  savePersonalPrompts,
 };
