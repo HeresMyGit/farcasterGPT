@@ -257,29 +257,35 @@ async function handleRequiresAction(run, threadId) {
               tool_call_id: tool.id,
               output: JSON.stringify(castData)
             };
-          } else if (tool.function.name === "fetch_url_details") {
-              const { url, prompt } = JSON.parse(tool.function.arguments);
-              console.warn(`Fetching description for URL: ${url}, with prompt: ${prompt || 'none'}...`);
-              
-              // Assuming there's a function fetchUrlDescription that handles URL interpretation
-              const description = await interpretUrl(url, prompt);
-              console.log(`Fetched description for URL: ${url}.`);
+        } else if (tool.function.name === "fetch_url_details") {
+            const { url, prompt } = JSON.parse(tool.function.arguments);
+            console.warn(`Fetching description for URL: ${url}, with prompt: ${prompt || 'none'}...`);
+            
+            // Assuming there's a function fetchUrlDescription that handles URL interpretation
+            const description = await interpretUrl(url, prompt);
+            console.log(`Fetched description for URL: ${url}.`);
 
-              return {
-                tool_call_id: tool.id,
-                output: JSON.stringify({ description }), // Returning the description as JSON
-              };
-          } else if (tool.function.name === 'fetch_trending_casts') {
-            const { channelId, limit, timeWindow } = JSON.parse(tool.function.arguments);
-            console.log(`Fetching trending casts for channelId: ${channelId}, limit: ${limit || 5}, timeWindow: ${timeWindow || '7d'}`);
-            
-            const result = await farcaster.getTrendingCasts(channelId, limit || 5, timeWindow || '7d');
-            
             return {
               tool_call_id: tool.id,
-              output: JSON.stringify(result)
+              output: JSON.stringify({ description }), // Returning the description as JSON
             };
-          }
+        } else if (tool.function.name === 'fetch_trending_casts') {
+          const { channelId, limit, timeWindow } = JSON.parse(tool.function.arguments);
+          console.log(`Fetching trending casts for channelId: ${channelId}, limit: ${limit || 5}, timeWindow: ${timeWindow || '7d'}`);
+          
+          const result = await farcaster.getTrendingCasts(channelId, limit || 5, timeWindow || '7d');
+          
+          return {
+            tool_call_id: tool.id,
+            output: JSON.stringify(result)
+          };
+        } else {
+          console.warn(`No handler for tool: ${tool.function.name}`);
+          return {
+            tool_call_id: tool.id,
+            output: JSON.stringify({ error: `No function for ${tool.function.name}` })
+          };
+        }
         // Add other function handlers if necessary
       })
     );
