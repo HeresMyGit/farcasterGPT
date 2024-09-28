@@ -11,6 +11,7 @@ const { getMferDescription } = require('./mfer.js');
 const { generateImage } = require('./image.js');
 const { interpretUrl } = require('./attachments.js');
 const farcaster = require('./farcaster');
+const degen = require('./degen');
 const personalPrompt = require('./personalprompt');
 const ham = require('./ham');
 const axios = require('axios');
@@ -275,6 +276,30 @@ async function handleRequiresAction(run, threadId) {
           
           const result = await farcaster.getTrendingCasts(channelId, limit || 5, timeWindow || '7d');
           
+          return {
+            tool_call_id: tool.id,
+            output: JSON.stringify(result)
+          };
+        } else if (tool.function.name === 'fetch_degen_airdrop_points') {
+          const { season, wallet } = JSON.parse(tool.function.arguments);
+          console.log(`Fetching airdrop points for season: ${season}, wallet: ${wallet}`);
+          const result = await degen.fetchAirdropPoints(season, wallet);
+          return {
+            tool_call_id: tool.id,
+            output: JSON.stringify(result)
+          };
+        } else if (tool.function.name === 'fetch_degen_airdrop_allowances') {
+          const { wallet, fid } = JSON.parse(tool.function.arguments);
+          console.log(`Fetching airdrop allowances for wallet: ${wallet}, FID: ${fid}`);
+          const result = await degen.fetchAirdropAllowances({ wallet, fid });
+          return {
+            tool_call_id: tool.id,
+            output: JSON.stringify(result)
+          };
+        } else if (tool.function.name === 'fetch_degen_airdrop_tips') {
+          const { fid, limit, offset } = JSON.parse(tool.function.arguments);
+          console.log(`Fetching airdrop tips for FID: ${fid}, limit: ${limit}, offset: ${offset}`);
+          const result = await degen.fetchAirdropTips(fid, limit, offset);
           return {
             tool_call_id: tool.id,
             output: JSON.stringify(result)
