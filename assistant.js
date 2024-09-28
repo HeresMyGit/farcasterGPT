@@ -569,7 +569,8 @@ async function handleWebhook(req, res) {
       console.log(`Image generated and attached: ${imageUrl}`);
     }
 
-    botMessage = replaceHam(69, botMessage)
+    botMessage = replaceMultipliersAndCountHam(5, botMessage)
+    botMessage = addHamTip(botMessage)
 
     // Check if the botMessage exceeds the 768 character limit
     const maxChunkSize = 768;
@@ -622,10 +623,10 @@ function splitMessageIntoChunks(message, maxChunkSize) {
   return chunks;
 }
 
-function replaceHam(maxHam, text) {
-  // Replace 🍖x100 or 🍖 x100 where 100 > maxHam
-  text = text.replace(/🍖\s*x\s*(\d+)/g, (match, p1) => {
-    return parseInt(p1) > maxHam ? `[HAM] x${p1}` : match;
+function replaceMultipliersAndCountHam(maxHam, text) {
+  // Replace x25 or x 25 where 25 is the maxHam, and wrap it in [brackets]
+  text = text.replace(/\bx\s*(\d+)/g, (match, p1) => {
+    return parseInt(p1) > maxHam ? `[x${p1}]` : match;
   });
 
   // Count the total instances of 🍖
@@ -644,6 +645,30 @@ function replaceHam(maxHam, text) {
   });
 
   return text;
+}
+
+function addHamTip(inputString, multiplier = 5) {
+    // Regular expression to find the rating in the format [RATE:number/5] with any number of brackets
+    const ratingRegex = /\[+\s*RATE:(\d)\/5\s*\]+/;
+
+    // Search for the rating in the input string
+    const match = inputString.match(ratingRegex);
+
+    if (match) {
+        // Extract the rating number
+        const rating = parseInt(match[1], 10);
+
+        // Calculate the tip amount
+        const tipAmount = rating * multiplier;
+
+        // Replace the rating in the input string with the ham tip, removing all brackets
+        const outputString = inputString.replace(ratingRegex, `\n\n🍖 x${tipAmount}`);
+
+        return outputString;
+    } else {
+        // If no rating is found, return the original string
+        return inputString;
+    }
 }
 
 module.exports = {

@@ -12,8 +12,13 @@ const {
 
 // Utility function to resolve FID, assuming FID is the username if it's invalid
 async function resolveFID(FID) {
-  // Check if FID is null, 0, or non-numerical
-  if (!FID || isNaN(FID)) {
+  // Return the FID as is if it's null or undefined
+  if (FID == null) {
+    return FID;
+  }
+
+  // Check if FID is non-numerical
+  if (isNaN(FID)) {
     console.warn(`Invalid FID provided (${FID}). Assuming it is a username.`);
     
     try {
@@ -31,7 +36,8 @@ async function resolveFID(FID) {
       return null;
     }
   }
-  return FID; // Return the original FID if it's valid
+
+  return FID; // Return the original FID if it's valid (numerical)
 }
 
 // Farcaster-related functions
