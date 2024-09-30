@@ -146,7 +146,7 @@ Post:
 // Function to publish the post using direct HTTP request
 async function publishPost(content, replyToHash = null, imageUrl, castIdHash = null, castIdFid = null) {
   try {
-    content = replaceHam(10, content)
+    content = removeHamTip()
     const url = 'https://api.neynar.com/v2/farcaster/cast';
     const maxChunkSize = 768;
 
@@ -186,34 +186,29 @@ async function publishPost(content, replyToHash = null, imageUrl, castIdHash = n
   }
 }
 
-function replaceHam(maxHam, text) {
-  // Replace 🍖x100 or 🍖 x100 where 100 > maxHam
-  text = text.replace(/🍖\s*x\s*(\d+)/g, (match, p1) => {
-    return parseInt(p1) > maxHam ? `` : match;
-  });
+function removeHamTip(inputString) {
+    // Regular expression to find the rating in the format RATE:number/5 without brackets for the match,
+    // but still replace the entire thing if surrounded by brackets
+    const ratingRegex = /\[.*RATE:(\d)\/5.*\]/;
 
-  // Count the total instances of 🍖
-  let hamCount = 0;
+    // Search for the rating in the input string
+    const match = inputString.match(ratingRegex);
 
-  // Replace extra 🍖 emojis with [HAM]
-  text = text.replace(/🍖/g, () => {
-    hamCount++;
-    return hamCount > maxHam ? '[HAM]' : '🍖';
-  });
+    if (match) {
+        // Replace the whole part surrounded by brackets with the ham tip
+        const outputString = inputString.replace(ratingRegex, ``);
 
-  // Replace patterns like "69 $DEGEN" with "69 [DEGEN]"
-  text = text.replace(/(\d+)\s?\$([A-Za-z]+)/g, (match, num, ticker) => {
-    console.log(`Adjusting pattern "${match}" to "${num} [${ticker}]".`);
-    return ``;
-  });
-
-  return text;
+        return outputString;
+    } else {
+        // If no rating is found, return the original string
+        return inputString;
+    }
 }
 
-async function castDailyMeme() {
+async function castDailyMeme(channel) {
   try {
     // Fetch trending casts from farcaster
-    let trendingCasts = await farcaster.getTrendingCasts("mfers", 1, "1h");
+    let trendingCasts = await farcaster.getTrendingCasts("mfers", 1, "6h");
     
     // Ensure that there is at least one cast
     if (!trendingCasts || trendingCasts.length === 0) {
@@ -443,7 +438,8 @@ async function generateAndCastImage(summaries, prompt, memeThread) {
     const messages = await openai.beta.threads.messages.list(threadId);
 
     const assistantMessage = messages.data.filter(msg => msg.role === 'assistant')[0];
-    const generatedPrompt = assistantMessage.content[0].text.value;
+    let generatedPrompt = assistantMessage.content[0].text.value;
+    generatedPrompt = removeHamTip(generatedPrompt)
     console.log('Generated comic prompt:', generatedPrompt);
 
     // Step 4: Generate the image based on the GPT-generated prompt
