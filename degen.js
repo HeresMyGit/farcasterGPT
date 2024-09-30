@@ -1,19 +1,36 @@
 const fetch = require('node-fetch');
 const farcaster = require('./farcaster'); 
 
-// Fetch Airdrop Points by Wallet and Season
-async function fetchAirdropPoints(season = 'current', wallet) {
-  const url = `https://api.degen.tips/airdrop2/${season}/points?wallet=${wallet}`;
+// Fetch Airdrop Points by Wallet, Season, and optional FID
+async function fetchAirdropPoints(season = 'current', wallet = null, FID = null) {
   try {
+    // Step 1: If FID is provided, resolve the FID to get the verified Ethereum wallet
+    if (FID) {
+      console.log(`FID provided: ${FID}. Attempting to resolve to Ethereum wallet...`);
+      wallet = await getVerifiedWallet(FID); // Get the verified wallet for the provided FID
+      if (!wallet) {
+        return { error: `Could not retrieve wallet for FID: ${FID}` };
+      }
+    }
+
+    // Step 2: Ensure that a wallet address is available
+    if (!wallet) {
+      return { error: 'No wallet address provided.' };
+    }
+
+    // Step 3: Fetch airdrop points for the given wallet and season
+    const url = `https://api.degen.tips/airdrop2/${season}/points?wallet=${wallet}`;
     console.log(`Fetching airdrop points for season: ${season}, wallet: ${wallet}`);
+
     const response = await fetch(url);
     if (!response.ok) {
-      throw new Error(`Error fetching airdrop points: ${response.statusText}`);
+      return { error: `Error fetching airdrop points: ${response.statusText}` };
     }
+
     const data = await response.json();
     return data;
   } catch (error) {
-    console.error('Error:', error);
+    console.error('Error fetching airdrop points:', error.message);
     return { error: error.message };
   }
 }

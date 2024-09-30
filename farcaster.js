@@ -330,6 +330,40 @@ async function fetchUserProfile(query) {
   }
 }
 
+async function fetchUsersByFids(fids) {
+  const url = `https://api.neynar.com/v2/farcaster/user/bulk?fids=${fids.join(',')}`;
+  const options = {
+    method: 'GET',
+    headers: {
+      'Accept': 'application/json',
+      'api_key': process.env.NEYNAR_API_KEY, // Ensure the API key is set in your environment variables
+    },
+  };
+
+  try {
+    const response = await fetch(url, options);
+
+    if (!response.ok) {
+      console.error(`Failed to fetch users by FIDs: ${response.status} ${response.statusText}`);
+      return null;
+    }
+
+    const data = await response.json();
+
+    // Check if there are any users in the result and return them
+    if (data.users && data.users.length > 0) {
+      return data.users; // Return the list of users found
+    } else {
+      console.warn(`No users found for FIDs: ${fids}`);
+      return null;
+    }
+
+  } catch (error) {
+    console.error(`Error fetching users by FIDs:`, error.message);
+    return null;
+  }
+}
+
 async function getPopularCasts(fid) {
   console.warn("Getting popular casts...")
   const url = `https://api.neynar.com/v2/farcaster/feed/user/popular?fid=${fid}&limit=3`;
