@@ -560,6 +560,7 @@ async function getTrendingCasts(channelId, limit = 5, timeWindow = '7d') {
         displayName: cast.author.display_name,
         pfpUrl: cast.author.pfp_url,
         bio: cast.author.profile.bio.text,
+        fid: cast.author.fid,
       },
       timestamp: cast.timestamp,
       reactions: {

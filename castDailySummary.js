@@ -2,11 +2,14 @@
 
 const fs = require('fs');
 const OpenAI = require('openai');
+const farcaster = require('./farcaster');
 const { neynarClient } = require('./client');
 const fetch = require('node-fetch'); // Include node-fetch
 const path = require('path');
 const { loadTrendingSummaries } = require('./threadUtils');
 const { splitMessageIntoChunks } = require('./assistant')
+const { generateImage } = require('./image.js');
+const { interpretUrl } = require('./attachments.js');
 
 require('dotenv').config();
 
@@ -141,31 +144,34 @@ Post:
 }
 
 // Function to publish the post using direct HTTP request
-async function publishPost(content, imageUrl = null) {
+async function publishPost(content, replyToHash = null, imageUrl, castIdHash = null, castIdFid = null) {
   try {
+    content = replaceHam(10, content)
     const url = 'https://api.neynar.com/v2/farcaster/cast';
     const maxChunkSize = 768;
 
     // Split the message into chunks if it exceeds the byte limit
     const messageChunks = splitMessageIntoChunks(content, maxChunkSize);
 
-    let previousReplyHash = null; // Used to thread the messages
+    let previousReplyHash = replyToHash; // Start with the image cast hash if provided
     let isFirstChunk = true;
 
     for (const chunk of messageChunks) {
-      // Include the image URL only in the first reply if it exists
       const currentReplyOptions = {
-        replyTo: previousReplyHash,
-        ...(isFirstChunk && imageUrl ? { embeds: [{ url: imageUrl }] } : {}), // Include image URL only in the first chunk
+        replyTo: previousReplyHash,  // Reply to the previous cast hash
         channelId: "mfergpt",
+        embeds: [
+          ...(isFirstChunk && imageUrl ? [{ url: imageUrl }] : []), // Add image URL if it's the first chunk
+          ...(castIdHash && castIdFid ? [{ cast_id: { hash: castIdHash, fid: castIdFid } }] : []) // Add cast_id embed if provided
+        ]
       };
 
       // Publish the cast using neynarClient
-      const reply = await neynarClient.publishCast(
-        process.env.SIGNER_UUID,  // Use the SIGNER_UUID from environment variables
-        chunk,                    // The message chunk to be sent
-        currentReplyOptions        // The reply options for threading
-      );
+      // const reply = await neynarClient.publishCast(
+      //   process.env.SIGNER_UUID,  // Use the SIGNER_UUID from environment variables
+      //   chunk,                    // The message chunk to be sent
+      //   currentReplyOptions        // The reply options for threading
+      // );
 
       console.log('Reply sent:', chunk);
 
@@ -180,11 +186,105 @@ async function publishPost(content, imageUrl = null) {
   }
 }
 
+function replaceHam(maxHam, text) {
+  // Replace 🍖x100 or 🍖 x100 where 100 > maxHam
+  text = text.replace(/🍖\s*x\s*(\d+)/g, (match, p1) => {
+    return parseInt(p1) > maxHam ? `` : match;
+  });
+
+  // Count the total instances of 🍖
+  let hamCount = 0;
+
+  // Replace extra 🍖 emojis with [HAM]
+  text = text.replace(/🍖/g, () => {
+    hamCount++;
+    return hamCount > maxHam ? '[HAM]' : '🍖';
+  });
+
+  // Replace patterns like "69 $DEGEN" with "69 [DEGEN]"
+  text = text.replace(/(\d+)\s?\$([A-Za-z]+)/g, (match, num, ticker) => {
+    console.log(`Adjusting pattern "${match}" to "${num} [${ticker}]".`);
+    return ``;
+  });
+
+  return text;
+}
+
+async function castDailyMeme() {
+  try {
+    // Fetch trending casts from farcaster
+    let trendingCasts = await farcaster.getTrendingCasts("mfers", 1, "1h");
+    
+    // Ensure that there is at least one cast
+    if (!trendingCasts || trendingCasts.length === 0) {
+      console.log('No trending casts available.');
+      return;
+    }
+
+    // Get the first cast
+    let firstCast = trendingCasts[0];
+    
+    let embeddedCastText = null;
+    let interpretedUrlText = null;
+    
+    // Check if there's an embedded cast
+    if (firstCast.embeds && firstCast.embeds.length > 0) {
+      // Assuming we're only concerned with the first embed
+      const embed = firstCast.embeds[0];
+      
+      if (embed.cast_id && embed.cast_id.hash) {
+        // Fetch the embedded cast by its hash
+        const embeddedCast = await farcaster.fetchMessageByHash(embed.cast_id.hash);
+        
+        if (embeddedCast && embeddedCast.text) {
+          embeddedCastText = `Embedded Cast: "${embeddedCast.text}"\n`;
+        }
+      }
+
+      // Handle embedded URL and use interpretUrl function
+      if (embed.url) {
+        const interpretedUrl = await interpretUrl(embed.url);
+        interpretedUrlText = `Interpreted URL: "${interpretedUrl}"\n`;
+      }
+    }
+
+    // Prepare the meme prompt using the text from the first cast and embedded cast if available
+    let prompt = `Generate a hilarious meme image-prompt based in the mfer/farcaster/nft/art/meme universe about the following cast, give subjects mfer gear like cigs and headphones. Do NOT create an image, ONLY return the text prompt (do not acknowledge me, etc). \n\nMain Cast: "${firstCast.text}"`;
+    if (embeddedCastText != null) {
+      prompt = prompt + `\n\nQuoted cast: ${embeddedCastText}`
+    }
+    if (interpretedUrlText != null) {
+      prompt = prompt + `\n\nInterpreted Url or Image: ${interpretedUrlText}`
+    }
+    
+    console.log(`Meme Prompt: ${prompt}`);
+    
+    // Generate the meme image based on the prompt (assuming generateAndCastImage handles this)
+    const imageUrl = await generateAndCastImage(null, prompt, "thread_3A1Y3VRxUv58ZeM0ABqHcKpH");
+
+    // Log the generated image for verification
+    console.log('Generated Daily Meme Image URL:', imageUrl);
+
+    // Define the daily post content (optional, adjust if needed)
+    const dailyPostContent = "hey mfer, here's today's meme!";
+
+    // Cast the text post as a reply to the image cast (assuming publishPost handles this)
+    await publishPost(dailyPostContent, null, imageUrl, firstCast.hash, firstCast.author.fid);
+
+  } catch (error) {
+    console.error('Error casting daily meme:', error);
+  }
+}
+
 async function castDailySummary() {
   const summaries = readDailySummaries();
   const previousSummaries = readPreviousSummaries();
-  console.log("summaries: ", summaries)
+
   const dailyPostContent = await generateDailyPost(summaries, previousSummaries);
+
+  // Generate and cast the image first, and get the cast hash
+  const imageUrl = await generateAndCastImage(dailyPostContent);
+
 
   // Create the formatted entry for the JSON file
   const newEntry = {
@@ -203,8 +303,8 @@ async function castDailySummary() {
   // Write the updated list of posts to the file
   fs.writeFileSync(PREVIOUS_SUMMARIES_FILE, JSON.stringify(existingPosts, null, 2));
 
-  // Cast the post (uncomment to enable posting)
-  await publishPost(dailyPostContent);
+  // Cast the text post as a reply to the image cast
+  await publishPost(dailyPostContent, null, imageUrl);
 }
 
 // trending
@@ -214,6 +314,10 @@ async function castTrendingSummary() {
   const summaries = loadTrendingSummaries();
 
   const trendingPostContent = await generateTrendingPost(summaries);
+
+  // Generate and cast the image first, and get the cast hash
+  const imageUrl = await generateAndCastImage();
+
 
   // Create the formatted entry for the JSON file
   const newEntry = {
@@ -226,8 +330,8 @@ async function castTrendingSummary() {
   // Print the generated post to console
   console.log('Generated Trending Post:', newEntry);
 
-  // Cast the post
-  await publishPost(trendingPostContent);
+  // Cast the text post as a reply to the image
+  await publishPost(trendingPostContent, null, imageUrl);
 }
 
 async function generateTrendingPost(summaries) {
@@ -298,4 +402,59 @@ Post:
   }
 }
 
-module.exports = { castDailySummary, castTrendingSummary };
+async function generateAndCastImage(summaries, prompt, memeThread) {
+  // Step 1: Create the prompt for the assistant model
+  let gptPrompt = ''
+
+  if (summaries != null) {
+    gptPrompt = `
+    Generate a prompt for an image (do NOT attempt to create an image, just return the text prompt).  The main focus of the image is always a robot mfer (stick figure wearing headphone smoking a cigarette) helping a bunch of mfers out in farcaster.  Include elements from the daily summaries at the end of this message (examples: an item in the background, a topical piece of clothing, computers showing websites, etc).
+    
+    Summaries:
+    ${summaries}
+  `;
+} else if (prompt != null) {
+  gptPrompt = prompt
+} else {
+  gptPrompt = `
+    Generate a prompt for an image (do NOT attempt to create an image, just return the text prompt).  The main focus of the image is always a robot mfer (stick figure wearing headphone smoking a cigarette) saying "gm farcaster" in an inspiring morning scene.`
+}
+
+  // Step 2: Call the assistant's beta model to generate the comic prompt
+  let thread
+  let threadId
+  if (memeThread != null) {
+    threadId = memeThread
+  } else {
+    thread = await openai.beta.threads.create({});
+    threadId = thread.id;
+  }
+
+  await openai.beta.threads.messages.create(threadId, {
+    role: 'user',
+    content: gptPrompt
+  });
+
+  // Polling the thread for completion
+  const run = await runThread(threadId);
+
+  // Step 3: Extract the generated prompt from the assistant's response
+  if (run.status === 'completed') {
+    const messages = await openai.beta.threads.messages.list(threadId);
+
+    const assistantMessage = messages.data.filter(msg => msg.role === 'assistant')[0];
+    const generatedPrompt = assistantMessage.content[0].text.value;
+    console.log('Generated comic prompt:', generatedPrompt);
+
+    // Step 4: Generate the image based on the GPT-generated prompt
+    const imageUrl = await generateImage("a hilarious meme about the following: " + generatedPrompt);
+    console.log('Image url generated:', imageUrl);
+
+    return imageUrl;
+  } else {
+    console.error('Error: Assistant run did not complete successfully.');
+    return null;
+  }
+}
+
+module.exports = { castDailySummary, castTrendingSummary, castDailyMeme };
