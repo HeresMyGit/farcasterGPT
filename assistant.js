@@ -673,8 +673,9 @@ function replaceMultipliersAndCountHam(maxHam, text) {
 }
 
 function addHamTip(inputString, multiplier = 5) {
-    // Regular expression to find the rating in the format [RATE:number/5] with any number of brackets
-    const ratingRegex = /\[+\s*RATE:(\d)\/5\s*\]+/;
+    // Regular expression to find the rating in the format RATE:number/5 without brackets for the match,
+    // but still replace the entire thing if surrounded by brackets
+    const ratingRegex = /\[.*RATE:(\d)\/5.*\]/;
 
     // Search for the rating in the input string
     const match = inputString.match(ratingRegex);
@@ -686,7 +687,7 @@ function addHamTip(inputString, multiplier = 5) {
         // Calculate the tip amount
         const tipAmount = rating * multiplier;
 
-        // Replace the rating in the input string with the ham tip, removing all brackets
+        // Replace the whole part surrounded by brackets with the ham tip
         const outputString = inputString.replace(ratingRegex, `\n\n🍖 x${tipAmount}`);
 
         return outputString;
