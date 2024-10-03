@@ -672,7 +672,7 @@ function replaceMultipliersAndCountHam(maxHam, text) {
   return text;
 }
 
-function addHamTip(inputString, multiplier = 5) {
+function addHamTip(inputString, multiplier = 15) {
     // Regular expression to find the rating in the format RATE:number/5 without brackets for the match,
     // but still replace the entire thing if surrounded by brackets
     const ratingRegex = /\[.*RATE:(\d)\/5.*\]/;

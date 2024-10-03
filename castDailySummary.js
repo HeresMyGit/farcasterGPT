@@ -146,14 +146,14 @@ Post:
 // Function to publish the post using direct HTTP request
 async function publishPost(content, replyToHash = null, imageUrl, castIdHash = null, castIdFid = null) {
   try {
-    content = removeHamTip()
+    content = removeHamTip(content)
     const url = 'https://api.neynar.com/v2/farcaster/cast';
     const maxChunkSize = 768;
 
     // Split the message into chunks if it exceeds the byte limit
     const messageChunks = splitMessageIntoChunks(content, maxChunkSize);
 
-    let previousReplyHash = replyToHash; // Start with the image cast hash if provided
+    let previousReplyHash = replyToHash; 
     let isFirstChunk = true;
 
     for (const chunk of messageChunks) {
@@ -162,18 +162,19 @@ async function publishPost(content, replyToHash = null, imageUrl, castIdHash = n
         channelId: "mfergpt",
         embeds: [
           ...(isFirstChunk && imageUrl ? [{ url: imageUrl }] : []), // Add image URL if it's the first chunk
-          ...(castIdHash && castIdFid ? [{ cast_id: { hash: castIdHash, fid: castIdFid } }] : []) // Add cast_id embed if provided
+          ...(isFirstChunk && castIdHash && castIdFid ? [{ cast_id: { hash: castIdHash, fid: castIdFid } }] : []) // Add cast_id embed if provided
         ]
       };
 
-      // Publish the cast using neynarClient
-      // const reply = await neynarClient.publishCast(
-      //   process.env.SIGNER_UUID,  // Use the SIGNER_UUID from environment variables
-      //   chunk,                    // The message chunk to be sent
-      //   currentReplyOptions        // The reply options for threading
-      // );
+      // // Publish the cast using neynarClient
+      const reply = await neynarClient.publishCast(
+        process.env.SIGNER_UUID,  // Use the SIGNER_UUID from environment variables
+        chunk,                    // The message chunk to be sent
+        currentReplyOptions        // The reply options for threading
+      );
 
       console.log('Reply sent:', chunk);
+      console.warn('reply options: ', JSON.stringify(currentReplyOptions, null, 2));
 
       // Update previousReplyHash to thread subsequent messages correctly
       previousReplyHash = reply.hash;
@@ -244,7 +245,7 @@ async function castDailyMeme(channel) {
     }
 
     // Prepare the meme prompt using the text from the first cast and embedded cast if available
-    let prompt = `Generate a hilarious meme image-prompt based in the mfer/farcaster/nft/art/meme universe about the following cast, give subjects mfer gear like cigs and headphones. Do NOT create an image, ONLY return the text prompt (do not acknowledge me, etc). \n\nMain Cast: "${firstCast.text}"`;
+    let prompt = `Generate a hilarious meme image-prompt based in the mfer/farcaster/nft/art/meme universe about the following cast, give subjects mfer gear like cigs and headphones. Do NOT create an image, ONLY return the text prompt (do not acknowledge me, etc).  You can censor "motherfucker" to help get passed the content filter.  Keep text short, as DALL-E can only handle a little bit of text, several words MAX between speech bubbles and captions.  only include speech and captions if necessary. \n\nMain Cast: "${firstCast.text}"`;
     if (embeddedCastText != null) {
       prompt = prompt + `\n\nQuoted cast: ${embeddedCastText}`
     }
@@ -255,17 +256,35 @@ async function castDailyMeme(channel) {
     console.log(`Meme Prompt: ${prompt}`);
     
     // Generate the meme image based on the prompt (assuming generateAndCastImage handles this)
-    const imageUrl = await generateAndCastImage(null, prompt, "thread_3A1Y3VRxUv58ZeM0ABqHcKpH");
+    const { imageUrl, generatedPrompt } = await generateAndCastImage(null, prompt, "thread_3A1Y3VRxUv58ZeM0ABqHcKpH");
 
     // Log the generated image for verification
     console.log('Generated Daily Meme Image URL:', imageUrl);
 
-    // Define the daily post content (optional, adjust if needed)
-    const dailyPostContent = "hey mfer, here's today's meme!";
+    if (imageUrl != null) {
+      thread = await openai.beta.threads.create({});
+      threadId = thread.id;
 
-    // Cast the text post as a reply to the image cast (assuming publishPost handles this)
-    await publishPost(dailyPostContent, null, imageUrl, firstCast.hash, firstCast.author.fid);
+      await openai.beta.threads.messages.create(threadId, {
+        role: 'user',
+        content: `create a short succinct description of this meme: ${generatedPrompt}`
+      });
 
+      // Polling the thread for completion
+      const run = await runThread(threadId);
+
+      // Step 3: Extract the generated prompt from the assistant's response
+      if (run.status === 'completed') {
+        const messages = await openai.beta.threads.messages.list(threadId);
+
+        const assistantMessage = messages.data.filter(msg => msg.role === 'assistant')[0];
+        let memeText = assistantMessage.content[0].text.value;
+        console.log("Meme text: ", memeText)
+
+        // Cast the text post as a reply to the image cast (assuming publishPost handles this)  
+        await publishPost(memeText, null, imageUrl, firstCast.hash, firstCast.author.fid);
+      }
+    }
   } catch (error) {
     console.error('Error casting daily meme:', error);
   }
@@ -278,7 +297,7 @@ async function castDailySummary() {
   const dailyPostContent = await generateDailyPost(summaries, previousSummaries);
 
   // Generate and cast the image first, and get the cast hash
-  const imageUrl = await generateAndCastImage(dailyPostContent);
+  const { imageUrl, generatedPrompt } = await generateAndCastImage(dailyPostContent);
 
 
   // Create the formatted entry for the JSON file
@@ -311,7 +330,7 @@ async function castTrendingSummary() {
   const trendingPostContent = await generateTrendingPost(summaries);
 
   // Generate and cast the image first, and get the cast hash
-  const imageUrl = await generateAndCastImage();
+  const { imageUrl, generatedPrompt } = await generateAndCastImage();
 
 
   // Create the formatted entry for the JSON file
@@ -446,7 +465,10 @@ async function generateAndCastImage(summaries, prompt, memeThread) {
     const imageUrl = await generateImage("a hilarious meme about the following: " + generatedPrompt);
     console.log('Image url generated:', imageUrl);
 
-    return imageUrl;
+    return {
+      imageUrl: imageUrl,
+      generatedPrompt: generatedPrompt
+    };
   } else {
     console.error('Error: Assistant run did not complete successfully.');
     return null;
