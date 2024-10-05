@@ -41,4 +41,9 @@ cron.schedule('0 6,12,18,0 * * *', async () => {
   timezone: 'America/Los_Angeles' // Set to Pacific Time
 });
 
+setInterval(() => {
+    const now = new Date();
+    console.log(`${now.toLocaleString()}: UP`);
+}, 15000);
+
 console.log('Scheduler started: running tasks at 4 PM / 7 AM PT daily.');
