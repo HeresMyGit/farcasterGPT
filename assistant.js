@@ -11,6 +11,8 @@ const { getMferDescription } = require('./mfer.js');
 const { generateImage } = require('./image.js');
 const { interpretUrl } = require('./attachments.js');
 const farcaster = require('./farcaster');
+const degen = require('./degen');
+const personalPrompt = require('./personalprompt');
 const ham = require('./ham');
 const axios = require('axios');
 const FormData = require('form-data');
@@ -256,19 +258,59 @@ async function handleRequiresAction(run, threadId) {
               tool_call_id: tool.id,
               output: JSON.stringify(castData)
             };
-          } else if (tool.function.name === "fetch_url_details") {
-              const { url, prompt } = JSON.parse(tool.function.arguments);
-              console.warn(`Fetching description for URL: ${url}, with prompt: ${prompt || 'none'}...`);
-              
-              // Assuming there's a function fetchUrlDescription that handles URL interpretation
-              const description = await interpretUrl(url, prompt);
-              console.log(`Fetched description for URL: ${url}.`);
+        } else if (tool.function.name === "fetch_url_details") {
+            const { url, prompt } = JSON.parse(tool.function.arguments);
+            console.warn(`Fetching description for URL: ${url}, with prompt: ${prompt || 'none'}...`);
+            
+            // Assuming there's a function fetchUrlDescription that handles URL interpretation
+            const description = await interpretUrl(url, prompt);
+            console.log(`Fetched description for URL: ${url}.`);
 
-              return {
-                tool_call_id: tool.id,
-                output: JSON.stringify({ description }), // Returning the description as JSON
-              };
-          }
+            return {
+              tool_call_id: tool.id,
+              output: JSON.stringify({ description }), // Returning the description as JSON
+            };
+        } else if (tool.function.name === 'fetch_trending_casts') {
+          const { channelId, limit, timeWindow } = JSON.parse(tool.function.arguments);
+          console.log(`Fetching trending casts for channelId: ${channelId}, limit: ${limit || 5}, timeWindow: ${timeWindow || '7d'}`);
+          
+          const result = await farcaster.getTrendingCasts(channelId, limit || 5, timeWindow || '7d');
+          
+          return {
+            tool_call_id: tool.id,
+            output: JSON.stringify(result)
+          };
+        } else if (tool.function.name === 'fetch_degen_airdrop_points') {
+          const { season, wallet } = JSON.parse(tool.function.arguments);
+          console.log(`Fetching airdrop points for season: ${season}, wallet: ${wallet}`);
+          const result = await degen.fetchAirdropPoints(season, wallet);
+          return {
+            tool_call_id: tool.id,
+            output: JSON.stringify(result)
+          };
+        } else if (tool.function.name === 'fetch_degen_airdrop_allowances') {
+          const { wallet, fid } = JSON.parse(tool.function.arguments);
+          console.log(`Fetching airdrop allowances for wallet: ${wallet}, FID: ${fid}`);
+          const result = await degen.fetchAirdropAllowances({ wallet, fid });
+          return {
+            tool_call_id: tool.id,
+            output: JSON.stringify(result)
+          };
+        } else if (tool.function.name === 'fetch_degen_airdrop_tips') {
+          const { fid, limit, offset } = JSON.parse(tool.function.arguments);
+          console.log(`Fetching airdrop tips for FID: ${fid}, limit: ${limit}, offset: ${offset}`);
+          const result = await degen.fetchAirdropTips(fid, limit, offset);
+          return {
+            tool_call_id: tool.id,
+            output: JSON.stringify(result)
+          };
+        } else {
+          console.warn(`No handler for tool: ${tool.function.name}`);
+          return {
+            tool_call_id: tool.id,
+            output: JSON.stringify({ error: `No function for ${tool.function.name}` })
+          };
+        }
         // Add other function handlers if necessary
       })
     );
@@ -456,116 +498,141 @@ async function handleWebhook(req, res) {
     const castText = hookData.data.text;
     console.warn(`castText: ${castText}`)
 
-//     const authorUsername = hookData.data.author.username;
+    const authorUsername = hookData.data.author.username;
+    const authorFID = hookData.data.author.fid;
 
-//     // Check if the bot has already replied to this message
-//     if (repliedMessageHashes.has(messageHash)) {
-//       console.log(`Already replied to message hash: ${messageHash}. Skipping reply.`);
-//       res.status(200).send('Already replied to this message.');
-//       return;
-//     }
+    // Check if the bot has already replied to this message
+    if (repliedMessageHashes.has(messageHash)) {
+      console.log(`Already replied to message hash: ${messageHash}. Skipping reply.`);
+      res.status(200).send('Already replied to this message.');
+      return;
+    }
 
-//     // Add the message hash to the cache to avoid duplicate replies
-//     repliedMessageHashes.add(messageHash);
+    console.log(`Liking the post with hash: ${messageHash}`);
+    await neynarClient.publishReactionToCast(process.env.SIGNER_UUID, "like", messageHash);
 
-//     // Check if there's already an OpenAI thread associated with this Farcaster thread
-//     let threadId = getOpenAIThreadId(farcasterThreadId);
+    res.status(200).send('Webhook received, post liked!');
 
-//     if (!threadId) {
-//       // No existing OpenAI thread, create a new one
-//       threadId = await createNewThread(`Response for ${hookData.data.author.username}`);
+    // Add the message hash to the cache to avoid duplicate replies
+    repliedMessageHashes.add(messageHash);
 
-//       // Save the new mapping
-//       saveOpenAIThreadId(farcasterThreadId, threadId);
-//     } else {
-//       console.log(`Using existing OpenAI thread ID: ${threadId} for Farcaster thread ID: ${farcasterThreadId}`);
-//     }
+    // Check if the cast contains #personalprompt
+    if (castText.includes('#personalprompt')) {
+      // Handle personal prompt
+      const prompt = castText.replace('#personalprompt', '').replace('@mfergpt', '').trim();
+      personalPrompt.setPersonalPrompt(authorFID, prompt);
 
-//     // Step 2: Add the initial user message to the thread
-//     // await createMessage(threadId, castText);
-//     await createMessage(threadId, `First, look up this thread to get context.  Always do this in case there have been more messages since you last interacted: Farcaster message hash: ${messageHash}\n\n------\n\nNow, respond to the latest cast from ${hookData.data.author.username}: ${castText}`);
+      console.log(`Saved personal prompt for FID ${authorFID}`);
+    }
 
-//     // Step 3: Run the Assistant on the thread
-//     let botMessage = 'Sorry, I couldn’t complete the request at this time.';
+    // Check if there's already an OpenAI thread associated with this Farcaster thread
+    let threadId = getOpenAIThreadId(farcasterThreadId);
 
-//     const run = await runThread(threadId, authorUsername); // Step 2: Include userProfiles and authorUsername
+    if (!threadId) {
+      // No existing OpenAI thread, create a new one
+      threadId = await createNewThread(`Response for ${hookData.data.author.username}`);
 
-//     // Check if the run has completed successfully
-//     if (run.status === 'completed') {
-//       const messages = await openai.beta.threads.messages.list(run.thread_id);
+      // Save the new mapping
+      saveOpenAIThreadId(farcasterThreadId, threadId);
+    } else {
+      console.log(`Using existing OpenAI thread ID: ${threadId} for Farcaster thread ID: ${farcasterThreadId}`);
+    }
 
-//       if (messages && messages.data && messages.data.length > 0) {
-//         const assistantMessages = messages.data.filter(msg => msg.role === 'assistant');
+    const personalPromptText = personalPrompt.getPersonalPrompt(authorFID);
 
-//         if (assistantMessages.length === 0) {
-//           console.error('No assistant messages found.');
-//           res.status(200).send('No assistant response generated.');
-//           return;
-//         }
+    // Step 2: Add the initial user message to the thread
+    // await createMessage(threadId, castText);
+    let userMessage = `First, look up this thread to get context. Always do this in case there have been more messages since you last interacted: Farcaster message hash: ${messageHash}\n\n------\n\nNow, respond to the latest cast from ${authorUsername}: ${castText}`;
 
-//         const latestAssistantMessage = assistantMessages[0]; // Get the latest message
-//         if (latestAssistantMessage && latestAssistantMessage.content && latestAssistantMessage.content[0] && latestAssistantMessage.content[0].text) {
-//           botMessage = latestAssistantMessage.content[0].text.value;
-//           console.log(`Generated response using threadID ${threadId}`);
-//         } else {
-//           console.error('Assistant message content is not structured as expected.');
-//         }
-//       } else {
-//         console.error('No messages found in the thread.');
-//       }
-//     } else {
-//       console.error(`Run did not complete successfully. Status: ${run.status}`);
-//     }
+    if (personalPromptText) {
+      userMessage = `${personalPromptText}\n\n${userMessage}`;
+      console.log(`Prepended personal prompt for FID ${authorFID}: ${personalPromptText}`);
+    }
 
-//     // Step 7: Reply to the cast with the Assistant's response and attach the image if generated
-//     const replyOptions = {
-//       replyTo: messageHash, // Use the specific message hash for correct threading
-//     };
+    await createMessage(threadId, userMessage);
 
-//     const imageUrl = imageUrlMap[run.id];
-//     if (imageUrl) {
-//       replyOptions.embeds = [{ url: imageUrl }];
-//       console.log(`Image generated and attached: ${imageUrl}`);
-//     }
+    // Step 3: Run the Assistant on the thread
+    let botMessage = 'Sorry, I couldn’t complete the request at this time.';
 
-//     botMessage = replaceHam(69, botMessage)
+    const run = await runThread(threadId, authorUsername); // Step 2: Include userProfiles and authorUsername
 
-//     // Check if the botMessage exceeds the 768 character limit
-//     const maxChunkSize = 768;
-//     const messageChunks = splitMessageIntoChunks(botMessage, maxChunkSize);
+    // Check if the run has completed successfully
+    if (run.status === 'completed') {
+      const messages = await openai.beta.threads.messages.list(run.thread_id);
 
-//     // Send each chunk sequentially
-//     let previousReplyHash = messageHash; // Start with the original message hash for threading
+      if (messages && messages.data && messages.data.length > 0) {
+        const assistantMessages = messages.data.filter(msg => msg.role === 'assistant');
 
-//     // Flag to check if the image URL needs to be included
-//     let isFirstChunk = true;
+        if (assistantMessages.length === 0) {
+          console.error('No assistant messages found.');
+          // res.status(200).send('No assistant response generated.');
+          return;
+        }
 
-//     for (const chunk of messageChunks) {
-//       // Include the image URL only in the first reply if it exists
-//       const currentReplyOptions = {
-//         replyTo: previousReplyHash,
-//         ...(isFirstChunk && imageUrl ? { embeds: [{ url: imageUrl }] } : {}) // Include image URL only in the first chunk
-//       };
+        const latestAssistantMessage = assistantMessages[0]; // Get the latest message
+        if (latestAssistantMessage && latestAssistantMessage.content && latestAssistantMessage.content[0] && latestAssistantMessage.content[0].text) {
+          botMessage = latestAssistantMessage.content[0].text.value;
+          console.log(`Generated response using threadID ${threadId}`);
+        } else {
+          console.error('Assistant message content is not structured as expected.');
+        }
+      } else {
+        console.error('No messages found in the thread.');
+      }
+    } else {
+      console.error(`Run did not complete successfully. Status: ${run.status}`);
+    }
 
-//       const reply = await neynarClient.publishCast(
-//         process.env.SIGNER_UUID,
-//         chunk,
-//         currentReplyOptions
-//       );
+    // Step 7: Reply to the cast with the Assistant's response and attach the image if generated
+    const replyOptions = {
+      replyTo: messageHash, // Use the specific message hash for correct threading
+    };
 
-//       console.log('Reply sent:', chunk);
+    const imageUrl = imageUrlMap[run.id];
+    if (imageUrl) {
+      replyOptions.embeds = [{ url: imageUrl }];
+      console.log(`Image generated and attached: ${imageUrl}`);
+    }
+
+    botMessage = replaceMultipliersAndCountHam(5, botMessage)
+    botMessage = addHamTip(botMessage)
+
+    // Check if the botMessage exceeds the 768 character limit
+    const maxChunkSize = 768;
+    const messageChunks = splitMessageIntoChunks(botMessage, maxChunkSize);
+
+    // Send each chunk sequentially
+    let previousReplyHash = messageHash; // Start with the original message hash for threading
+
+    // Flag to check if the image URL needs to be included
+    let isFirstChunk = true;
+
+    for (const chunk of messageChunks) {
+      // Include the image URL only in the first reply if it exists
+      const currentReplyOptions = {
+        replyTo: previousReplyHash,
+        ...(isFirstChunk && imageUrl ? { embeds: [{ url: imageUrl }] } : {}) // Include image URL only in the first chunk
+      };
+
+      const reply = await neynarClient.publishCast(
+        process.env.SIGNER_UUID,
+        chunk,
+        currentReplyOptions
+      );
+
+      console.log('Reply sent:', chunk);
       
-//       // Update previousReplyHash to thread subsequent messages correctly
-//       previousReplyHash = reply.hash;
+      // Update previousReplyHash to thread subsequent messages correctly
+      previousReplyHash = reply.hash;
       
-//       // Set the flag to false after the first chunk
-//       isFirstChunk = false;
+      // Set the flag to false after the first chunk
+      isFirstChunk = false;
 
-//       delete imageUrlMap[run.id];
-//     }
+      delete imageUrlMap[run.id];
+    }
 
-//     console.log('Reply sent:', botMessage);
-    res.status(200).send('Webhook received and response sent!');
+    console.log('Reply sent:', botMessage);
+    // res.status(200).send('Webhook received and response sent!');
   } catch (error) {
     console.error('Error processing webhook:', error);
     res.status(500).send('Server error');
@@ -581,10 +648,10 @@ function splitMessageIntoChunks(message, maxChunkSize) {
   return chunks;
 }
 
-function replaceHam(maxHam, text) {
-  // Replace 🍖x100 or 🍖 x100 where 100 > maxHam
-  text = text.replace(/🍖\s*x\s*(\d+)/g, (match, p1) => {
-    return parseInt(p1) > maxHam ? `[HAM] x${p1}` : match;
+function replaceMultipliersAndCountHam(maxHam, text) {
+  // Replace x25 or x 25 where 25 is the maxHam, and wrap it in [brackets]
+  text = text.replace(/\bx\s*(\d+)/g, (match, p1) => {
+    return parseInt(p1) > maxHam ? `[x${p1}]` : match;
   });
 
   // Count the total instances of 🍖
@@ -603,6 +670,31 @@ function replaceHam(maxHam, text) {
   });
 
   return text;
+}
+
+function addHamTip(inputString, multiplier = 15) {
+    // Regular expression to find the rating in the format RATE:number/5 without brackets for the match,
+    // but still replace the entire thing if surrounded by brackets
+    const ratingRegex = /\[.*RATE:(\d)\/5.*\]/;
+
+    // Search for the rating in the input string
+    const match = inputString.match(ratingRegex);
+
+    if (match) {
+        // Extract the rating number
+        const rating = parseInt(match[1], 10);
+
+        // Calculate the tip amount
+        const tipAmount = rating * multiplier;
+
+        // Replace the whole part surrounded by brackets with the ham tip
+        const outputString = inputString.replace(ratingRegex, `\n\n🍖 x${tipAmount}`);
+
+        return outputString;
+    } else {
+        // If no rating is found, return the original string
+        return inputString;
+    }
 }
 
 module.exports = {

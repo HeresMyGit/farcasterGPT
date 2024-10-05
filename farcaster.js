@@ -12,8 +12,13 @@ const {
 
 // Utility function to resolve FID, assuming FID is the username if it's invalid
 async function resolveFID(FID) {
-  // Check if FID is null, 0, or non-numerical
-  if (!FID || isNaN(FID)) {
+  // Return the FID as is if it's null or undefined
+  if (FID == null) {
+    return FID;
+  }
+
+  // Check if FID is non-numerical
+  if (isNaN(FID)) {
     console.warn(`Invalid FID provided (${FID}). Assuming it is a username.`);
     
     try {
@@ -31,7 +36,8 @@ async function resolveFID(FID) {
       return null;
     }
   }
-  return FID; // Return the original FID if it's valid
+
+  return FID; // Return the original FID if it's valid (numerical)
 }
 
 // Farcaster-related functions
@@ -324,6 +330,40 @@ async function fetchUserProfile(query) {
   }
 }
 
+async function fetchUsersByFids(fids) {
+  const url = `https://api.neynar.com/v2/farcaster/user/bulk?fids=${fids.join(',')}`;
+  const options = {
+    method: 'GET',
+    headers: {
+      'Accept': 'application/json',
+      'api_key': process.env.NEYNAR_API_KEY, // Ensure the API key is set in your environment variables
+    },
+  };
+
+  try {
+    const response = await fetch(url, options);
+
+    if (!response.ok) {
+      console.error(`Failed to fetch users by FIDs: ${response.status} ${response.statusText}`);
+      return null;
+    }
+
+    const data = await response.json();
+
+    // Check if there are any users in the result and return them
+    if (data.users && data.users.length > 0) {
+      return data.users; // Return the list of users found
+    } else {
+      console.warn(`No users found for FIDs: ${fids}`);
+      return null;
+    }
+
+  } catch (error) {
+    console.error(`Error fetching users by FIDs:`, error.message);
+    return null;
+  }
+}
+
 async function getPopularCasts(fid) {
   console.warn("Getting popular casts...")
   const url = `https://api.neynar.com/v2/farcaster/feed/user/popular?fid=${fid}&limit=3`;
@@ -488,7 +528,13 @@ async function getChannelDetails(query) {
 // Function to fetch trending Farcaster casts from a specific channel
 async function getTrendingCasts(channelId, limit = 5, timeWindow = '7d') {
   console.warn(`Fetching trending casts for channel ID: ${channelId}`);
-  const url = `https://api.neynar.com/v2/farcaster/feed/trending?limit=${limit}&time_window=${timeWindow}&channel_id=${channelId}&provider=neynar`;
+  // Base URL
+  let url = `https://api.neynar.com/v2/farcaster/feed/trending?limit=${limit}&time_window=${timeWindow}&provider=neynar`;
+
+  // Only add channelId if it's not null or undefined
+  if (channelId) {
+    url += `&channel_id=${channelId}`;
+  }
   const options = {
     method: 'GET',
     headers: {
@@ -514,6 +560,7 @@ async function getTrendingCasts(channelId, limit = 5, timeWindow = '7d') {
         displayName: cast.author.display_name,
         pfpUrl: cast.author.pfp_url,
         bio: cast.author.profile.bio.text,
+        fid: cast.author.fid,
       },
       timestamp: cast.timestamp,
       reactions: {
@@ -674,6 +721,7 @@ module.exports = {
   fetchUserProfile,
   getPopularCasts,
   getRecentCasts,
+  getTrendingCasts,
   generateUserProfile,
   updateUserProfilesFromMessages,
   loadAndFilterRelevantUserProfiles,
