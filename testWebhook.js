@@ -8,12 +8,12 @@ const { handleWebhook } = require('./assistant');
 
 // Your test webhook data
 const testWebhookData = {
-  "created_at": 1726442095,
+  "created_at": 1727059275,
   "type": "cast.created",
   "data": {
     "object": "cast",
-    "hash": "0xc293c32e8c1abfd2d72ce56001de955b46465103",
-    "thread_hash": "0xc293c32e8c1abfd2d72ce56001de955b46465103",
+    "hash": "0x5222e0e092c83dbae25fee6f63254cf6e1c169f0",
+    "thread_hash": "0x5222e0e092c83dbae25fee6f63254cf6e1c169f0",
     "parent_hash": null,
     "parent_url": null,
     "root_parent_url": null,
@@ -32,8 +32,8 @@ const testWebhookData = {
           "text": "I make mfer products and software like @mfergpt"
         }
       },
-      "follower_count": 1717,
-      "following_count": 499,
+      "follower_count": 1792,
+      "following_count": 551,
       "verifications": [
         "0x0a8138c495cd47367e635b94feb7612a230221a4"
       ],
@@ -46,9 +46,22 @@ const testWebhookData = {
       "active_status": "inactive",
       "power_badge": false
     },
-    "text": "@mfergpt give me new data on @kevinmfer.",
-    "timestamp": "2024-09-15T23:14:56.000Z",
-    "embeds": [],
+    "text": "@mfergpt please describe @kevinmfer pfp",
+    "timestamp": "2024-09-23T02:41:14.000Z",
+    "embeds": [
+      {
+        "url": "https://imagedelivery.net/BXluQx4ige9GuW0Ia56BHw/c17a679a-dc7e-482f-e9f9-354210f8e000/original",
+        "metadata": {
+          "_status": "PENDING"
+        }
+      },
+      {
+        "cast_id": {
+          "fid": 242188,
+          "hash": "0x7ee0f051364f6ee6ee93cae85746cfbc6c634c53"
+        }
+      }
+    ],
     "reactions": {
       "likes_count": 0,
       "recasts_count": 0,
@@ -73,7 +86,7 @@ const testWebhookData = {
             "mentioned_profiles": []
           }
         },
-        "follower_count": 144,
+        "follower_count": 226,
         "following_count": 1,
         "verifications": [
           "0x3b54621fe962ee8e5283f2429b800e2e212c9a02"
@@ -88,9 +101,11 @@ const testWebhookData = {
         "power_badge": false
       }
     ],
-    "event_timestamp": "2024-09-15T23:14:55.916Z"
+    "event_timestamp": "2024-09-23T02:41:14.958Z"
   }
 }
+
+
 
 
 // Create mock request (req) and response (res) objects
