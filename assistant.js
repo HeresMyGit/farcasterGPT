@@ -485,23 +485,82 @@ async function runThread(threadId, authorUsername) {
   console.error('Max retries reached. Failed to complete the assistant run.');
 }
 
-// Moved the webhook handler code into a separate function
+// Add this cache to track message counts per FID
+const messageTracker = {};
+
+// Helper function to clean up expired entries with logging
+function cleanupMessageTracker(fid) {
+  const now = Date.now();
+  const initialCount = messageTracker[fid]?.length || 0;
+
+  // Filter out timestamps that are older than 60 seconds
+  messageTracker[fid] = messageTracker[fid].filter(timestamp => now - timestamp <= 60000);
+
+  const removedCount = initialCount - messageTracker[fid].length;
+  if (removedCount > 0) {
+    console.log(`Cleanup for FID ${fid}: removed ${removedCount} old messages.`);
+  }
+
+  // If no recent messages are left, delete the FID entry
+  if (messageTracker[fid].length === 0) {
+    delete messageTracker[fid];
+    console.log(`Removed FID ${fid} from message tracker due to no recent messages.`);
+  }
+}
+
+// Modified handleWebhook function with spam detection and additional logging
 async function handleWebhook(req, res) {
-  // Implementation of the webhook handling logic
   try {
-    // Print all details of the webhook to understand its structure
     console.log('Received webhook data:', JSON.stringify(req.body, null, 2));
-
     const hookData = req.body;
-    const farcasterThreadId = hookData.data.thread_hash; // Use thread_hash for managing threads
-    const messageHash = hookData.data.hash; // Use hash for replying
+    const farcasterThreadId = hookData.data.thread_hash;
+    const messageHash = hookData.data.hash;
     const castText = hookData.data.text;
-    console.warn(`castText: ${castText}`)
-
     const authorUsername = hookData.data.author.username;
     const authorFID = hookData.data.author.fid;
+    const now = Date.now();
 
-    // Check if the bot has already replied to this message
+    // Initialize message tracking for the authorFID if not present
+    if (!messageTracker[authorFID]) {
+      messageTracker[authorFID] = [];
+      console.log(`Initialized message tracker for FID ${authorFID}`);
+    }
+
+    // Add current timestamp to track recent messages
+    messageTracker[authorFID].push(now);
+    console.log(`Added message timestamp for FID ${authorFID}: ${now}`);
+    console.log(`Current timestamps for FID ${authorFID}:`, messageTracker[authorFID]);
+
+    // Cleanup old timestamps and log the process
+    cleanupMessageTracker(authorFID);
+    console.log(`After cleanup, timestamps for FID ${authorFID}:`, messageTracker[authorFID]);
+
+    // Check for spam based on recent message count within time windows
+    const recentMessages = messageTracker[authorFID];
+    const messagesInLast10Sec = recentMessages.filter(ts => now - ts <= 10000).length;
+    const messagesInLast60Sec = recentMessages.filter(ts => now - ts <= 60000).length;
+
+    console.log(`FID ${authorFID} sent ${messagesInLast10Sec} messages in the last 10 seconds and ${messagesInLast60Sec} messages in the last 60 seconds.`);
+
+    if (messagesInLast10Sec > 3) {
+      // More than 3 messages in last 10 seconds
+      const spamMessage = 'u mfer \n\n spam detected - message ignored';
+      console.log(`Spam detected for FID ${authorFID}: ${spamMessage}`);
+      await neynarClient.publishCast(process.env.SIGNER_UUID, spamMessage, { replyTo: messageHash });
+      res.status(200).send('Spam message detected and response sent.');
+      return;
+    }
+
+    if (messagesInLast60Sec > 5) {
+      // More than 5 messages in last 60 seconds
+      const spamMessage = 'u mfer \n\n spam detected - message ignored';
+      console.log(`Spam detected for FID ${authorFID}: ${spamMessage}`);
+      await neynarClient.publishCast(process.env.SIGNER_UUID, spamMessage, { replyTo: messageHash });
+      res.status(200).send('Spam message detected and response sent.');
+      return;
+    }
+
+    // Proceed with normal handling if not spam
     if (repliedMessageHashes.has(messageHash)) {
       console.log(`Already replied to message hash: ${messageHash}. Skipping reply.`);
       res.status(200).send('Already replied to this message.');
@@ -553,8 +612,7 @@ async function handleWebhook(req, res) {
 
     // Step 3: Run the Assistant on the thread
     let botMessage = 'Sorry, I couldn’t complete the request at this time.';
-
-    const run = await runThread(threadId, authorUsername); // Step 2: Include userProfiles and authorUsername
+    const run = await runThread(threadId, authorUsername);
 
     // Check if the run has completed successfully
     if (run.status === 'completed') {
@@ -562,19 +620,11 @@ async function handleWebhook(req, res) {
 
       if (messages && messages.data && messages.data.length > 0) {
         const assistantMessages = messages.data.filter(msg => msg.role === 'assistant');
-
-        if (assistantMessages.length === 0) {
-          console.error('No assistant messages found.');
-          // res.status(200).send('No assistant response generated.');
-          return;
-        }
-
-        const latestAssistantMessage = assistantMessages[0]; // Get the latest message
-        if (latestAssistantMessage && latestAssistantMessage.content && latestAssistantMessage.content[0] && latestAssistantMessage.content[0].text) {
-          botMessage = latestAssistantMessage.content[0].text.value;
+        if (assistantMessages.length > 0) {
+          botMessage = assistantMessages[0].content[0].text.value;
           console.log(`Generated response using threadID ${threadId}`);
         } else {
-          console.error('Assistant message content is not structured as expected.');
+          console.error('No assistant messages found.');
         }
       } else {
         console.error('No messages found in the thread.');
@@ -585,7 +635,7 @@ async function handleWebhook(req, res) {
 
     // Step 7: Reply to the cast with the Assistant's response and attach the image if generated
     const replyOptions = {
-      replyTo: messageHash, // Use the specific message hash for correct threading
+      replyTo: messageHash,
     };
 
     const imageUrl = imageUrlMap[run.id];
@@ -594,24 +644,23 @@ async function handleWebhook(req, res) {
       console.log(`Image generated and attached: ${imageUrl}`);
     }
 
-    botMessage = replaceMultipliersAndCountHam(5, botMessage)
-    botMessage = addHamTip(botMessage)
+    botMessage = replaceMultipliersAndCountHam(5, botMessage);
+    botMessage = addHamTip(botMessage);
 
     // Check if the botMessage exceeds the 768 character limit
     const maxChunkSize = 768;
     const messageChunks = splitMessageIntoChunks(botMessage, maxChunkSize);
 
-    // Send each chunk sequentially
-    let previousReplyHash = messageHash; // Start with the original message hash for threading
 
     // Flag to check if the image URL needs to be included
+    let previousReplyHash = messageHash;
     let isFirstChunk = true;
 
     for (const chunk of messageChunks) {
       // Include the image URL only in the first reply if it exists
       const currentReplyOptions = {
         replyTo: previousReplyHash,
-        ...(isFirstChunk && imageUrl ? { embeds: [{ url: imageUrl }] } : {}) // Include image URL only in the first chunk
+        ...(isFirstChunk && imageUrl ? { embeds: [{ url: imageUrl }] } : {})
       };
 
       const reply = await neynarClient.publishCast(
