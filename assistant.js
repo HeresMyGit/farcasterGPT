@@ -601,7 +601,7 @@ async function handleWebhook(req, res) {
 
     // Step 2: Add the initial user message to the thread
     // await createMessage(threadId, castText);
-    let userMessage = `First, look up this thread to get context. Always do this in case there have been more messages since you last interacted: Farcaster message hash: ${messageHash}\n\n------\n\nNow, respond to the latest cast from ${authorUsername}: ${castText}`;
+    let userMessage = `First, look up this thread to get context. Always do this in case there have been more messages since you last interacted: Farcaster message hash: ${messageHash}\n\n------\n\nRemember, never describe the cast, just simply respond to it as if you were replying directly to that user.  Now, respond to the latest cast from ${authorUsername}: ${castText}`;
 
     if (personalPromptText) {
       userMessage = `${personalPromptText}\n\n${userMessage}`;
