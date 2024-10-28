@@ -138,7 +138,7 @@ async function tweetAssistantResponse(prompt, imagePrompt) {
 
   try {
     // const threadId = await createNewThread('Tweet Assistant Thread');
-    const threadId = "thread_LjYtMwn3LjNkfydJKu3Yyqcx"
+    const threadId = "thread_FPHRJSjuJjRWm2pAKOVExB7a"
     // const threadId = "thread_4VhjP76xjye37eeziZ0Uu0XJ"
     await createMessage(threadId, prompt);
     const assistantResponse = await runThread(threadId);
@@ -166,15 +166,34 @@ async function tweetAssistantResponse(prompt, imagePrompt) {
   }
 }
 
+
+const lengths = ["1-25 characters", "25-75 characters", "75-150 characters", "150-240 characters"];
+const types = ["a bullpost", "funny", "a story about yourself", "absurd", "heartfelt", "hype", "a strongwilled positive statement", "pure shitpost", "deep, insightful, and thought provoking"];
+const topics = ["mfers", "mfercoin", "mfers", "$mfer", "mfers nfts", "ai", "onchain ai", "twitter/x", "farcaster", "blockchain", "mfercoin", "mfers", "$mfer backed assets from mfer.club", "mfer.com", "whatever you want", "anything", "crypto", "gmfer ($gmfr) backed by $mfer", "sartoshicoin ($sartoshi) backed by $mfer"];
+
 // Example usage of the function
 // (async () => {
-//   console.log('Running the tweetAssistantResponse example...');
-//   const prompt = 'great!  next one is going live, give it your best';
+//   const randomLength = lengths[Math.floor(Math.random() * lengths.length)];
+//   const randomType = types[Math.floor(Math.random() * types.length)];
+//   const randomTopic = topics[Math.floor(Math.random() * topics.length)];
+//   const prompt = `the next tweet should be ${randomLength} and ${randomType} about ${randomTopic}.  remember always include $mfer. next`;
+//     console.log(`Sending prompt: ${prompt}`);
 //   await tweetAssistantResponse(prompt);
 // })();
 
+// cron.schedule('0,30 * * * *', async () => {
+//   console.log('Running the scheduled tweetAssistantResponse...');
+//   const prompt = 'next';
+//   await tweetAssistantResponse(prompt);
+// });
+
+
 cron.schedule('0,30 * * * *', async () => {
   console.log('Running the scheduled tweetAssistantResponse...');
-  const prompt = 'next';
+  const randomLength = lengths[Math.floor(Math.random() * lengths.length)];
+  // const randomType = types[Math.floor(Math.random() * types.length)];
+  // const randomTopic = topics[Math.floor(Math.random() * topics.length)];
+  const prompt = `the next tweet should be ${randomLength}.  remember always include $mfer. next`;
+  console.log(`Sending prompt: ${prompt}`);
   await tweetAssistantResponse(prompt);
 });
