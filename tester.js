@@ -19,7 +19,7 @@ const { sendTweet } = require('./twitter');
     // await runTrendingSummary();
   // await castTrendingSummary();
     // await castDailyMeme();
-    await sendTweet('This is a tweet without an image.');
+    // await sendTweet('This is a tweet without an image.');
   } catch (error) {
     console.error('Error during scheduled tasks:', error);
   }
