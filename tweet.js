@@ -132,6 +132,11 @@ async function deleteLocalImage(localPath) {
   }
 }
 
+function generateMferImageURL() {
+  const randomNumber = Math.floor(Math.random() * 10021); // Random number between 0 and 10020
+  return `https://heads.mfers.dev/${randomNumber}.png`;
+}
+
 // Main function to create a thread, add a message, run the assistant, and tweet the response
 async function tweetAssistantResponse(prompt, imagePrompt) {
   console.log('Starting tweetAssistantResponse...');
@@ -146,16 +151,17 @@ async function tweetAssistantResponse(prompt, imagePrompt) {
     if (assistantResponse) {
       // const imageUrl = await generateImage(imagePrompt);
       // const imageUrl = "https://pbs.twimg.com/profile_images/1630381377119039489/324MZNjk_400x400.jpg"
+      const imageUrl = generateMferImageURL();
 
-      // if (imageUrl) {
-      //   console.log(`Image generated. URL: ${imageUrl}`);
-      //   const localImagePath = path.join(__dirname, 'temp-image.png');
-      //   await downloadImage(imageUrl, localImagePath);
-      //   await sendTweet(assistantResponse, localImagePath);
-      //   await deleteLocalImage(localImagePath);
-      // } else {
+      if (imageUrl) {
+        console.log(`Image generated. URL: ${imageUrl}`);
+        const localImagePath = path.join(__dirname, 'temp-image.png');
+        await downloadImage(imageUrl, localImagePath);
+        await sendTweet(assistantResponse, localImagePath);
+        await deleteLocalImage(localImagePath);
+      } else {
         await sendTweet(assistantResponse);
-      // }
+      }
 
       console.log('Tweet sent successfully!');
     } else {
@@ -174,10 +180,11 @@ const topics = ["mfers", "mfercoin", "mfers", "$mfer", "mfers nfts", "ai", "onch
 // Example usage of the function
 // (async () => {
 //   const randomLength = lengths[Math.floor(Math.random() * lengths.length)];
-//   const randomType = types[Math.floor(Math.random() * types.length)];
-//   const randomTopic = topics[Math.floor(Math.random() * topics.length)];
-//   const prompt = `the next tweet should be ${randomLength} and ${randomType} about ${randomTopic}.  remember always include $mfer. next`;
+//   // const randomType = types[Math.floor(Math.random() * types.length)];
+//   // const randomTopic = topics[Math.floor(Math.random() * topics.length)];
+//   const prompt = `the next tweet should be ${randomLength}.  remember always include $mfer. next`;
 //     console.log(`Sending prompt: ${prompt}`);
+//   // const imgPrompt = "a stick figure smoking a cigarette"
 //   await tweetAssistantResponse(prompt);
 // })();
 
@@ -197,3 +204,13 @@ cron.schedule('0,30 * * * *', async () => {
   console.log(`Sending prompt: ${prompt}`);
   await tweetAssistantResponse(prompt);
 });
+
+// cron.schedule('0,30 * * * *', async () => {
+//   console.log('Running the scheduled tweetAssistantResponse...');
+//   const randomLength = lengths[Math.floor(Math.random() * lengths.length)];
+//   // const randomType = types[Math.floor(Math.random() * types.length)];
+//   // const randomTopic = topics[Math.floor(Math.random() * topics.length)];
+//   const prompt = `the next tweet should be ${randomLength}.  remember always include $mfer. next`;
+//   console.log(`Sending prompt: ${prompt}`);
+//   await tweetAssistantResponse(prompt);
+// });
