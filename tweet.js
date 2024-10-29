@@ -134,7 +134,7 @@ async function deleteLocalImage(localPath) {
 
 function generateMferImageURL() {
   const randomNumber = Math.floor(Math.random() * 10021); // Random number between 0 and 10020
-  return `https://heads.mfers.dev/${randomNumber}.png`;
+  return `https://plain.mfers.dev/${randomNumber}.png`;
 }
 
 // Main function to create a thread, add a message, run the assistant, and tweet the response
