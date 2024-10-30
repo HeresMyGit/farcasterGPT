@@ -310,7 +310,8 @@ async function handleRequiresAction(run, threadId) {
           const { tokenContractId, network = "base" } = JSON.parse(tool.function.arguments);
 
           // Convert tokenContractId to uppercase
-          const upperCaseTokenContractId = tokenContractId?.toUpperCase();
+          const formattedTokenContractId = tokenContractId?.toLowerCase() === "sartoshi" ? "$SARTOSHI" : tokenContractId?.toUpperCase();
+          const upperCaseTokenContractId = formattedTokenContractId?.toUpperCase();
 
           if (!upperCaseTokenContractId) {
             return {
