@@ -11,6 +11,7 @@ const { getMferDescription } = require('./mfer.js');
 const { generateImage } = require('./image.js');
 const { interpretUrl } = require('./attachments.js');
 const farcaster = require('./farcaster');
+const mintclub = require('./mintClub');
 const degen = require('./degen');
 const personalPrompt = require('./personalprompt');
 const ham = require('./ham');
@@ -303,6 +304,29 @@ async function handleRequiresAction(run, threadId) {
           return {
             tool_call_id: tool.id,
             output: JSON.stringify(result)
+          };
+        } else if (tool.function.name === "fetch_mintclub_token_details") {
+          // Extract tokenContractId and network parameters
+          const { tokenContractId, network = "base" } = JSON.parse(tool.function.arguments);
+
+          // Convert tokenContractId to uppercase
+          const upperCaseTokenContractId = tokenContractId?.toUpperCase();
+
+          if (!upperCaseTokenContractId) {
+            return {
+              tool_call_id: tool.id,
+              output: JSON.stringify({ error: "Token contract ID is required" })
+            };
+          }
+
+          console.log(`Fetching token details for contract ID: ${upperCaseTokenContractId} on network: ${network}`);
+          const { token } = mintclub.initializeContracts(null, upperCaseTokenContractId, network); // Initialize with specified network
+
+          const tokenDetails = await mintclub.getTokenDetails(token);
+
+          return {
+            tool_call_id: tool.id,
+            output: JSON.stringify(tokenDetails) // Return formatted token details
           };
         } else {
           console.warn(`No handler for tool: ${tool.function.name}`);
