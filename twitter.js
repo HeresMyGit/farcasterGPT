@@ -44,23 +44,6 @@ function generateAuthHeader(url, method) {
 }
 
 // Function to upload media to Twitter
-// async function uploadMedia(imagePath) {
-//   const url = 'https://upload.twitter.com/1.1/media/upload.json';
-//   const mediaData = fs.readFileSync(imagePath, { encoding: 'base64' });
-
-//   const authHeader = generateAuthHeader(url, 'POST');
-
-//   const response = await axios.post(url, `media_data=${mediaData}`, {
-//     headers: {
-//       Authorization: authHeader['Authorization'],
-//       'Content-Type': 'application/x-www-form-urlencoded',
-//     }
-//   });
-
-//   return response.data.media_id_string;
-// }
-
-// Function to upload media to Twitter
 async function uploadMedia(imagePath) {
   const url = 'https://upload.twitter.com/1.1/media/upload.json';
   const mediaData = fs.readFileSync(imagePath); // read as binary for FormData
