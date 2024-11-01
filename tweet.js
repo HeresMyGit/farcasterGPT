@@ -2,6 +2,7 @@ require('dotenv').config(); // Load environment variables
 const { OpenAI } = require('openai'); // Import OpenAI SDK
 const { sendTweet } = require('./twitter.js'); // Import the sendTweet function
 const { generateImage } = require('./image.js'); // Import image generation function
+const { getMferDescription } = require('./mfer.js');
 const cron = require('node-cron'); // Import node-cron for scheduling
 const fs = require('fs');
 const path = require('path');
@@ -132,38 +133,78 @@ async function deleteLocalImage(localPath) {
   }
 }
 
-function generateMferImageURL() {
-  const randomNumber = Math.floor(Math.random() * 10021); // Random number between 0 and 10020
-  return `https://plain.mfers.dev/${randomNumber}.png`;
+// Function to generate a specific mfer image URL based on mfer ID
+function generateMferImageURL(mferId) {
+  return `https://plain.mfers.dev/${mferId}.png`;
+}
+
+// Function to generate tweet image with mfer, using GPT to refine the image prompt
+async function generateTweetImage(mferId, tweetContent) {
+  console.log(`Fetching description for mfer ID: ${mferId}`);
+  const description = await getMferDescription(mferId.toString());
+
+  // Extract background color from the traits
+  const backgroundColor = description.traits.background || "orange or blue";
+
+  // Initial image prompt based on mfer description, background color, and tweet content
+  const initialPrompt = `A stylized depiction with a ${backgroundColor} background of ${description.description}, doing something that matches the content of this tweet: "${tweetContent}". \n\nMake it cool, sketchy, beautiful, stick figure, or realistic based on tweet vibe. Show the character doing a cool/powerful/chill/based/dope activity.  only return the prompt, do not include any extra text or greetings.`;
+
+  console.log(`Initial image prompt: ${initialPrompt}`);
+
+  // Send the initial prompt to ChatGPT for refinement
+  const refinedPrompt = await getRefinedImagePrompt(initialPrompt);
+
+  console.log(`Refined image prompt: ${refinedPrompt}`);
+  return await generateImage(refinedPrompt);
+}
+
+// Function to get a refined image prompt by creating a new thread and sending the initial prompt
+async function getRefinedImagePrompt(initialPrompt) {
+  console.log('Creating a new thread for refining image prompt...');
+  try {
+    const threadId = await createNewThread("Refine Image Prompt Thread");
+    await createMessage(threadId, initialPrompt);
+
+    console.log(`Running assistant on thread ${threadId} for refined prompt...`);
+    const refinedPrompt = await runThread(threadId);
+
+    if (!refinedPrompt) {
+      console.error('Failed to receive a refined image prompt. Using initial prompt.');
+      return initialPrompt;
+    }
+
+    return refinedPrompt;
+  } catch (error) {
+    console.error('Error refining image prompt:', error.response ? error.response.data : error.message);
+    return initialPrompt; // Fallback to initial prompt if any error occurs
+  }
 }
 
 // Main function to create a thread, add a message, run the assistant, and tweet the response
-async function tweetAssistantResponse(prompt, imagePrompt) {
+async function tweetAssistantResponse(prompt) {
   console.log('Starting tweetAssistantResponse...');
-
   try {
-    // const threadId = await createNewThread('Tweet Assistant Thread');
-    const threadId = "thread_FPHRJSjuJjRWm2pAKOVExB7a"
-    // const threadId = "thread_4VhjP76xjye37eeziZ0Uu0XJ"
+    const threadId = "thread_FPHRJSjuJjRWm2pAKOVExB7a"; // Example thread ID
     await createMessage(threadId, prompt);
     const assistantResponse = await runThread(threadId);
-    
+
     if (assistantResponse) {
-      // const imageUrl = await generateImage(imagePrompt);
-      // const imageUrl = "https://pbs.twimg.com/profile_images/1630381377119039489/324MZNjk_400x400.jpg"
-      const imageUrl = generateMferImageURL();
+      const mferId = Math.floor(Math.random() * 10021); // Pick a random mfer ID
+      const imageUrl = generateMferImageURL(mferId);
+      const customImageUrl = await generateTweetImage(mferId, assistantResponse);
 
-      if (imageUrl) {
-        console.log(`Image generated. URL: ${imageUrl}`);
-        const localImagePath = path.join(__dirname, 'temp-image.png');
-        await downloadImage(imageUrl, localImagePath);
-        await sendTweet(assistantResponse, localImagePath);
-        await deleteLocalImage(localImagePath);
-      } else {
-        await sendTweet(assistantResponse);
-      }
+      const localImagePath = path.join(__dirname, 'temp-image.png');
+      await downloadImage(imageUrl, localImagePath); // Download original mfer image
+      const customImagePath = path.join(__dirname, 'custom-image.png');
+      await downloadImage(customImageUrl, customImagePath); // Download custom image
 
-      console.log('Tweet sent successfully!');
+      await sendTweet(assistantResponse, [localImagePath, customImagePath]); // Send tweet with both images
+
+      // Delete images after use
+      await deleteLocalImage(localImagePath);
+      await deleteLocalImage(customImagePath);
+
+      console.log('Tweet sent successfully with images!');
     } else {
       console.error('Failed to generate a valid assistant response.');
     }
@@ -171,7 +212,6 @@ async function tweetAssistantResponse(prompt, imagePrompt) {
     console.error('Error during OpenAI and Twitter interaction:', error);
   }
 }
-
 
 const lengths = ["1-25 characters", "1-50 characters", "25-75 characters", "50-100 characters", "75-150 characters", "150-240 characters"];
 const types = ["a bullpost", "funny", "a story about yourself", "absurd", "heartfelt", "hype", "a strongwilled positive statement", "pure shitpost", "deep, insightful, and thought provoking"];
@@ -195,7 +235,8 @@ const topics = ["mfers", "mfercoin", "mfers", "$mfer", "mfers nfts", "ai", "onch
 // });
 
 
-cron.schedule('0,30 * * * *', async () => {
+// run every 2 hours starting at midnight
+cron.schedule('0 */2 * * *', async () => {
   console.log('Running the scheduled tweetAssistantResponse...');
   const randomLength = lengths[Math.floor(Math.random() * lengths.length)];
   // const randomType = types[Math.floor(Math.random() * types.length)];

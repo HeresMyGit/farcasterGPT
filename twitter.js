@@ -63,16 +63,17 @@ async function uploadMedia(imagePath) {
   return response.data.media_id_string;
 }
 
-// Main function to send a tweet
-async function sendTweet(text, imageURL = null) {
+// Main function to send a tweet with multiple images
+async function sendTweet(text, imagePaths = []) {
   try {
-    let media_id = null;
+    let media_ids = [];
 
-    // Upload the image if an imageURL is provided
-    if (imageURL) {
-      const imagePath = path.resolve(imageURL);
-      console.log(`Uploading image from: ${imagePath}`);
-      media_id = await uploadMedia(imagePath);
+    // Upload each image and collect the media IDs
+    for (const imagePath of imagePaths) {
+      const resolvedPath = path.resolve(imagePath);
+      console.log(`Uploading image from: ${resolvedPath}`);
+      const media_id = await uploadMedia(resolvedPath);
+      media_ids.push(media_id);
       console.log(`Media uploaded with ID: ${media_id}`);
     }
 
@@ -81,8 +82,8 @@ async function sendTweet(text, imageURL = null) {
       text: text,
     };
 
-    if (media_id) {
-      tweetData.media = { media_ids: [media_id] };
+    if (media_ids.length > 0) {
+      tweetData.media = { media_ids: media_ids };
     }
 
     const tweetURL = 'https://api.twitter.com/2/tweets';
