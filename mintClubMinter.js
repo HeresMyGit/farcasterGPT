@@ -16,7 +16,7 @@ const sepoliaWETH = {
   decimals: 18,
 };
 
-// Bond contract ABI (simplified for createToken function)
+// Bond contract ABI (simplified for createMultiToken function)
 const BOND_ABI = [
   {
     inputs: [
@@ -57,7 +57,7 @@ const bondContractAddress = "0x8dce343A86Aa950d539eeE0e166AFfd0Ef515C0c"; // Rep
 // Instantiate the bond contract
 const bondContract = new ethers.Contract(bondContractAddress, BOND_ABI, wallet);
 
-async function uploadToIPFS(imageUrl) {
+async function uploadImageToIPFS(imageUrl) {
   if (!filebaseApiKey) {
     throw new Error("Filebase API key is missing. Please set FILEBASE_API_KEY in your environment variables.");
   }
@@ -82,6 +82,27 @@ async function uploadToIPFS(imageUrl) {
   }
 }
 
+async function uploadMetadataToIPFS(imageIpfsUrl, name, description) {
+  try {
+    console.log("Uploading metadata to IPFS...");
+
+    const metadataIpfsUrl = await mintclub.ipfs.uploadMetadata({
+      filebaseApiKey,
+      image: imageIpfsUrl,
+      name,
+      description,
+      external_url: 'https://mint.club',
+      attributes: [{ trait_type: 'rarity', value: 'legendary' }],
+    });
+
+    console.log("Metadata uploaded to IPFS with URL:", metadataIpfsUrl);
+    return metadataIpfsUrl;
+  } catch (error) {
+    console.error("Error uploading metadata to IPFS:", error);
+    throw new Error("Failed to upload metadata to IPFS");
+  }
+}
+
 async function createNewToken(name, symbol, metadataUrl) {
   try {
     // Define token parameters as per the MultiToken function structure
@@ -95,7 +116,7 @@ async function createNewToken(name, symbol, metadataUrl) {
     const bondParams = {
       mintRoyalty: 30,  // Setting mint royalty as in the example
       burnRoyalty: 30,  // Setting burn royalty as in the example
-      reserveToken: '0x7b79995e5f793A07Bc00c21412e50Ecae098E7f9',  // Using example address
+      reserveToken: '0xfFf9976782d46CC05630D1f6eBAb18b2324d6B14',  // Using example address
       maxSupply: 100,  // Adjusted max supply from the example
       stepRanges: Array.from({ length: 100 }, (_, i) => i + 1),  // Example range, 1 to 100
       stepPrices: [
@@ -150,12 +171,13 @@ async function createNewToken(name, symbol, metadataUrl) {
 }
 
 // Main function to create and mint an ERC-1155 NFT
-async function createAndMintNFT(contractName, contractUriImageUrl) {
+async function createAndMintNFT(contractName, symbol, contractUriImageUrl, description) {
   if (!contractUriImageUrl) throw new Error("Contract image URL is undefined.");
 
   try {
-    const metadataUrl = await uploadToIPFS(contractUriImageUrl); // Upload metadata to IPFS
-    const contractAddress = await createNewToken(contractName, "SYMBOL", metadataUrl); // Deploy contract with bonding curve
+    const imageIpfsUrl = await uploadImageToIPFS(contractUriImageUrl); // Upload image to IPFS
+    const metadataUrl = await uploadMetadataToIPFS(imageIpfsUrl, contractName, description); // Upload metadata to IPFS
+    const contractAddress = await createNewToken(contractName, symbol, metadataUrl); // Deploy contract with bonding curve
 
     if (contractAddress) {
       console.log("NFT contract created successfully on Sepolia:", contractAddress);
@@ -167,7 +189,7 @@ async function createAndMintNFT(contractName, contractUriImageUrl) {
 }
 
 // Usage example
-// createAndMintNFT('test contract1', 'https://heads.mfers.dev/7444.png');
+// createAndMintNFT('test contract1', 'SYMBOL', 'https://heads.mfers.dev/7444.png', 'This is a test NFT description');
 
 module.exports = {
   createAndMintNFT,
