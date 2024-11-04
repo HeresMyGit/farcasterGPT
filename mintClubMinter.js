@@ -26,7 +26,7 @@ const BOND_ABI = [
           { internalType: 'string', name: 'symbol', type: 'string' },
           { internalType: 'string', name: 'uri', type: 'string' },
         ],
-        internalType: 'struct MCV2_Bond.TokenParams',
+        internalType: 'struct MCV2_Bond.MultiTokenParams',
         name: 'tp',
         type: 'tuple',
       },
@@ -44,7 +44,7 @@ const BOND_ABI = [
         type: 'tuple',
       },
     ],
-    name: 'createToken',
+    name: 'createMultiToken',
     outputs: [{ internalType: 'address', name: '', type: 'address' }],
     stateMutability: 'payable',
     type: 'function',
@@ -84,28 +84,61 @@ async function uploadToIPFS(imageUrl) {
 
 async function createNewToken(name, symbol, metadataUrl) {
   try {
+    // Define token parameters as per the MultiToken function structure
     const tokenParams = {
       name,
       symbol,
       uri: metadataUrl,
     };
 
+    // Define bonding parameters based on the provided values
     const bondParams = {
-      mintRoyalty: 100,
-      burnRoyalty: 150,
-      reserveToken: sepoliaWETH.address,
-      maxSupply: 10000000, // Use regular integer value
-      stepRanges: [10000, 100000, 200000, 500000, 1000000, 2000000, 5000000, 10000000], // Regular integers
-      stepPrices: [0, 2, 3, 4, 5, 7, 10, 15], // Regular integers
+      mintRoyalty: 30,  // Setting mint royalty as in the example
+      burnRoyalty: 30,  // Setting burn royalty as in the example
+      reserveToken: '0x7b79995e5f793A07Bc00c21412e50Ecae098E7f9',  // Using example address
+      maxSupply: 100,  // Adjusted max supply from the example
+      stepRanges: Array.from({ length: 100 }, (_, i) => i + 1),  // Example range, 1 to 100
+      stepPrices: [
+        "1000000000000000", "1047615752789665", "1097498765493056", "1149756995397736",
+        "1204503540258782", "1261856883066020", "1321941148466029", "1384886371393873",
+        "1450828778495940", "1519911082952934", "1592282793341092", "1668100537200058",
+        "1747528400007683", "1830738280295367", "1917910261672487", "2009233002565045",
+        "2104904144512018", "2205130739903043", "2310129700083157", "2420128264794379",
+        "2535364493970108", "2656087782946682", "2782559402207120", "2915053062825172",
+        "3053855508833411", "3199267137797379", "3351602650938838", "3511191734215127",
+        "3678379771828629", "3853528593710524", "4037017258596549", "4229242874389492",
+        "4430621457583873", "4641588833612771", "4862601580065345", "5094138014816370",
+        "5336699231206300", "5590810182512214", "5857020818056656", "6135907273413162",
+        "6428073117284309", "6734150657750809", "7054802310718630", "7390722033525764",
+        "7742636826811256", "8111308307896857", "8497534359086428", "8902150854450371",
+        "9326033468832182", "9770099572992236", "10235310218990244", "10722672220103212",
+        "11233240329780254", "11768119524349963", "12328467394420640", "12915496650148815",
+        "13530477745798046", "14174741629268026", "14849682622544623", "15556761439304689",
+        "16297508346206410", "17073526474706873", "17886495290574313", "18738174228603802",
+        "19630406500402670", "20565123083486472", "21544346900318794", "22570197196339153",
+        "23644894126454024", "24770763559917055", "25950242113997303", "27185882427329347",
+        "28480358684357953", "29836472402833325", "31257158496882290", "32745491628777210",
+        "34304692863149105", "35938136638046195", "37649358067924600", "39442060594376466",
+        "41320124001153270", "43287612810830480", "45348785081285710", "47508101621027850",
+        "49770235643320990", "52140082879996726", "54622772176843280", "57223676593502030",
+        "59948425031893950", "62802914418342360", "65793322465756630", "68926121043496800",
+        "72208090183854450", "75646332755462690", "79248289835391520", "83021756813197220",
+        "86974900261778100", "91116275611548670", "95454845666183130", "99999999999999710"
+      ],  // Adjusted step prices based on example
     };
 
-    console.log("Creating token with the following parameters:", tokenParams, bondParams);
+    console.log("Attempting to create token with parameters:");
+    console.log("Token Params:", tokenParams);
+    console.log("Bond Params:", bondParams);
 
-    const tx = await bondContract.createToken(tokenParams, bondParams, {
-      value: ethers.utils.parseEther("0.01"), // Adjust value if necessary
+    // Send transaction using createMultiToken function
+    const tx = await bondContract.createMultiToken(tokenParams, bondParams, {
+      gasLimit: 3000000,  // Manually set gas limit
     });
 
     console.log("Transaction sent, waiting for confirmation...");
+    console.log("Transaction details:", tx);
+
     const receipt = await tx.wait();
     console.log("Token created successfully, transaction receipt:", receipt);
 
