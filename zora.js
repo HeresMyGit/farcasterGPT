@@ -1,29 +1,16 @@
-const { createCreatorClient } = require("@zoralabs/protocol-sdk");
-const { createPublicClient, http } = require("viem");
-const { ethers, Interface, MaxUint256 } = require("ethers");
-const axios = require("axios");
-const FormData = require("form-data");
-require("dotenv").config();
+const { ethers } = require('ethers');
+const axios = require('axios');
+const FormData = require('form-data');
+require('dotenv').config();
 
 const privateKey = process.env.PRIVATE_KEY;
 const infuraProjectId = process.env.INFURA_PROJECT_ID;
 const infuraProjectSecret = process.env.INFURA_PROJECT_SECRET;
-const creatorAddress = "0xc1c8f153E18B93A3A1ec3CBd0e3F9b38159d2644";
 
-const zoraContractAddress = "0x339563f98180dda919b9efc56f4f74c2e0b68dd0";
-const fixedPriceSaleStrategyAddress = "0x6d28164C3CE04A190D5F9f0f8881fc807EAD975A";
-
-const zoraSepolia = {
-  id: 999999999,
-  name: "Zora Sepolia",
-  nativeCurrency: { decimals: 18, name: "SepoliaETH", symbol: "ETH" },
-  rpcUrls: { default: { http: ['https://sepolia.rpc.zora.energy'] } },
-};
-
-const publicClient = createPublicClient({
-  chain: zoraSepolia,
-  transport: http(),
-});
+const recipientAddress = ethers.getAddress("0xc1c8f153e18b93a3a1ec3cbd0e3f9b38159d2644"); // renamed from creatorAddress to recipientAddress
+const tokenCreatorAddress = ethers.getAddress("0x210CdB70BfCA0De607eC219c10bFB6132e4d3a04"); // the true address that created the token
+const zoraContractAddress = ethers.getAddress("0x339563f98180dda919b9efc56f4f74c2e0b68dd0");
+const fixedPriceSaleStrategyAddress = ethers.getAddress("0x6d28164c3ce04a190d5f9f0f8881fc807ead975a");
 
 const provider = new ethers.JsonRpcProvider('https://sepolia.rpc.zora.energy');
 const wallet = new ethers.Wallet(privateKey, provider);
@@ -49,12 +36,13 @@ async function uploadToIPFS(data) {
   }
 }
 
-async function createContractAndToken(tokenName, tokenUriImageUrl) {
+async function createToken(tokenUriImageUrl, tokenName, description) {
   if (!tokenUriImageUrl) {
     throw new Error("Token image URL is undefined.");
   }
 
   try {
+    // Token creation code
     const tokenMetadataUri = await uploadToIPFS({
       name: tokenName,
       image: await uploadImageToIPFS(tokenUriImageUrl),
@@ -64,13 +52,13 @@ async function createContractAndToken(tokenName, tokenUriImageUrl) {
       ]
     });
 
-    const factoryInterface = new Interface([
+    const factoryInterface = new ethers.Interface([
       "function setupNewTokenWithCreateReferral(string newURI, uint256 maxSupply, address createReferral) returns (uint256)",
       "event SetupNewToken(uint256 indexed tokenId, address indexed creator, string newURI, uint256 maxSupply)"
     ]);
 
     const encodedData = factoryInterface.encodeFunctionData("setupNewTokenWithCreateReferral", [
-      tokenMetadataUri, MaxUint256, creatorAddress
+      tokenMetadataUri, ethers.MaxUint256, recipientAddress
     ]);
 
     const tx2 = await wallet.sendTransaction({
@@ -82,23 +70,25 @@ async function createContractAndToken(tokenName, tokenUriImageUrl) {
     const receipt = await tx2.wait();
     console.log("Token created successfully, transaction receipt:", receipt);
 
-    if (!receipt || !receipt.logs || receipt.logs.length === 0) {
-      console.error("Error: No logs found in the transaction receipt. Receipt:", receipt);
-      throw new Error("Failed to retrieve tokenId from transaction receipt events.");
-    }
-
-    const setupNewTokenEvent = receipt.logs.find(log => log.topics[0] === ethers.id("SetupNewToken(uint256,address,string,uint256)"));
+    // Extract tokenId from the event logs
+    const setupNewTokenEvent = receipt.logs.find(
+      log => log.topics[0] === ethers.id("SetupNewToken(uint256,address,string,uint256)")
+    );
 
     if (!setupNewTokenEvent) {
-      console.error("Error: SetupNewToken event not found in transaction logs. Logs:", receipt.logs);
       throw new Error("Failed to retrieve tokenId from transaction logs.");
     }
 
-    const decodedEvent = factoryInterface.decodeEventLog("SetupNewToken", setupNewTokenEvent.data, setupNewTokenEvent.topics);
+    const decodedEvent = factoryInterface.decodeEventLog(
+      "SetupNewToken",
+      setupNewTokenEvent.data,
+      setupNewTokenEvent.topics
+    );
     const tokenId = decodedEvent.tokenId;
 
-    console.log("Retrieved tokenId:", tokenId);
+    console.log("Retrieved tokenId:", tokenId.toString());
 
+    // Start the sale
     await startFreeNeverEndingSale(tokenId);
 
     return { contractAddress: zoraContractAddress, tokenUri: tokenMetadataUri };
@@ -109,69 +99,99 @@ async function createContractAndToken(tokenName, tokenUriImageUrl) {
 }
 
 async function startFreeNeverEndingSale(tokenId) {
-  const saleStrategyInterface = new ethers.Interface([
-    "function setSale(uint256 tokenId, (uint64 saleStart, uint64 saleEnd, uint64 maxTokensPerAddress, uint96 pricePerToken, address fundsRecipient) salesConfig)",
-    "function callSale(uint256 tokenId, address salesConfig, bytes data)"
-  ]);
+  const creatorContractABI = [
+    "function callSale(uint256 tokenId, address saleStrategy, bytes data) external",
+    "function addPermission(uint256 tokenId, address user, uint256 permissionBits) external"
+  ];
 
-  const salesConfig = {
-    saleStart: Math.floor(Date.now() / 1000), // Current time
-    saleEnd: 4102444800, // Future date (January 1, 2100)
-    maxTokensPerAddress: 0, // No limit per address
-    pricePerToken: ethers.parseUnits("0", "ether"), // Free (0 ETH)
-    fundsRecipient: creatorAddress // Recipient of funds (irrelevant since it’s free)
-  };
-
-  // Predefine `callSaleData` outside the try-catch block
-  let callSaleData = '';
-
-  const abiCoder = new ethers.AbiCoder();
-  const encodedSalesConfig = abiCoder.encode(
-    ["tuple(uint64 saleStart, uint64 saleEnd, uint64 maxTokensPerAddress, uint96 pricePerToken, address fundsRecipient)"],
-    [salesConfig]
+  const creatorContract = new ethers.Contract(
+    zoraContractAddress,
+    creatorContractABI,
+    wallet
   );
 
+  const salesConfig = {
+    saleStart: BigInt(Math.floor(Date.now() / 1000)),
+    saleEnd: BigInt(4102444800),
+    maxTokensPerAddress: BigInt(0),
+    pricePerToken: ethers.parseUnits("0", "ether"),
+    fundsRecipient: recipientAddress
+  };
+
+  const saleStrategyInterface = new ethers.Interface([
+    "function setSale(uint256 tokenId, (uint64 saleStart, uint64 saleEnd, uint64 maxTokensPerAddress, uint96 pricePerToken, address fundsRecipient) salesConfig)"
+  ]);
+
+  const encodedData = saleStrategyInterface.encodeFunctionData("setSale", [
+    tokenId,
+    [
+      salesConfig.saleStart,
+      salesConfig.saleEnd,
+      salesConfig.maxTokensPerAddress,
+      salesConfig.pricePerToken,
+      salesConfig.fundsRecipient,
+    ]
+  ]);
+
   try {
-    // First, set the sale configuration
-    const setSaleData = saleStrategyInterface.encodeFunctionData("setSale", [
+    const PERMISSION_BIT_SALES = BigInt(8);
+    const PERMISSION_BIT_MINTER = BigInt(4);
+
+    // Add permission to your wallet address for sales
+    console.log("Attempting to add sales permission for tokenId:", tokenId.toString());
+    const tx1 = await creatorContract["addPermission(uint256,address,uint256)"](
       tokenId,
-      salesConfig
-    ]);
+      wallet.address,
+      PERMISSION_BIT_SALES
+    );
+    console.log("Waiting for sales permission transaction to be mined...");
+    await tx1.wait();
+    console.log("Sales permission added successfully");
 
-    let tx = await wallet.sendTransaction({
-      to: fixedPriceSaleStrategyAddress,
-      data: setSaleData,
-      gasLimit: 300000,
-    });
-
-    await tx.wait();
-    console.log("Sale configuration set for token:", tokenId);
-
-    // Now, construct `callSaleData` for the `callSale` function
-    callSaleData = saleStrategyInterface.encodeFunctionData("callSale", [
+    // Grant MINTER permission to the sales strategy contract
+    console.log("Granting MINTER permission to the sales strategy contract...");
+    const tx2 = await creatorContract["addPermission(uint256,address,uint256)"](
       tokenId,
       fixedPriceSaleStrategyAddress,
-      encodedSalesConfig
-    ]);
+      PERMISSION_BIT_MINTER
+    );
+    console.log("Waiting for MINTER permission transaction to be mined...");
+    await tx2.wait();
+    console.log("MINTER permission granted successfully");
 
-    console.log("Constructed callSaleData:", callSaleData);
+    // Fetch current gas prices
+    const feeData = await provider.getFeeData();
+    console.log("Fee data retrieved:", feeData);
 
-    tx = await wallet.sendTransaction({
-      to: fixedPriceSaleStrategyAddress,
-      data: callSaleData,
-      gasLimit: 300000,
-    });
+    // Set a reasonable gas limit
+    const gasLimit = 5000000;
+    console.log("Gas limit set to:", gasLimit);
 
-    await tx.wait();
-    console.log("Free, never-ending sale started for token:", tokenId);
-  } catch (error) {
-    console.error("Error starting free, never-ending sale:", error);
-    console.log("Transaction Data:", {
-      to: fixedPriceSaleStrategyAddress,
-      data: callSaleData, // `callSaleData` should now be defined here
-      salesConfig: encodedSalesConfig,
+    // Log transaction options before sending
+    const txOptions = {
+      gasLimit: gasLimit,
+      maxFeePerGas: feeData.maxFeePerGas,
+      maxPriorityFeePerGas: feeData.maxPriorityFeePerGas
+    };
+    console.log("Transaction options:", txOptions);
+
+    // Send the actual transaction
+    console.log("Attempting to call callSale with tokenId:", tokenId.toString());
+    console.log("Using sale strategy address:", fixedPriceSaleStrategyAddress);
+    console.log("With encoded data:", encodedData);
+
+    const tx3 = await creatorContract.callSale(
       tokenId,
-    });
+      fixedPriceSaleStrategyAddress,
+      encodedData,
+      txOptions
+    );
+
+    console.log("Transaction sent, awaiting confirmation...");
+    await tx3.wait();
+    console.log("Free, never-ending sale started for token:", tokenId.toString());
+  } catch (error) {
+    console.error("Error starting sale:", error);
     throw error;
   }
 }
@@ -206,5 +226,5 @@ async function uploadImageToIPFS(imageUrl) {
 }
 
 module.exports = {
-  createContractAndToken,
+  createToken,
 };
