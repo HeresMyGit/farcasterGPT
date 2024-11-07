@@ -46,7 +46,7 @@ const testWebhookData = {
       "active_status": "inactive",
       "power_badge": false
     },
-    "text": "@mfergpt give me new data on @kevinmfer.",
+    "text": "@mfergpt generate an image of a mfer surfing.",
     "timestamp": "2024-09-15T23:14:56.000Z",
     "embeds": [],
     "reactions": {

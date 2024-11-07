@@ -36,21 +36,29 @@ async function uploadToIPFS(data) {
   }
 }
 
-async function createToken(tokenUriImageUrl, tokenName, description) {
+async function createToken(tokenUriImageUrl, tokenName, description, author) {
   if (!tokenUriImageUrl) {
     throw new Error("Token image URL is undefined.");
   }
 
   try {
-    // Token creation code
-    const tokenMetadataUri = await uploadToIPFS({
+    console.log("Uploading image to IPFS...");
+    const imageUri = await uploadImageToIPFS(tokenUriImageUrl);
+    console.log("Image uploaded to IPFS:", imageUri);
+
+    // Create the metadata object including the author as the first attribute
+    const metadata = {
       name: tokenName,
-      image: await uploadImageToIPFS(tokenUriImageUrl),
+      description: description,
+      image: imageUri,
       attributes: [
-        { trait_type: "Trait 1", value: "Value 1" },
-        { trait_type: "Trait 2", value: "Value 2" }
+        { trait_type: "Author", value: author }
       ]
-    });
+    };
+
+    console.log("Uploading metadata to IPFS...");
+    const tokenMetadataUri = await uploadToIPFS(metadata);
+    console.log("Metadata uploaded to IPFS:", tokenMetadataUri);
 
     const factoryInterface = new ethers.Interface([
       "function setupNewTokenWithCreateReferral(string newURI, uint256 maxSupply, address createReferral) returns (uint256)",
@@ -113,10 +121,18 @@ async function startFreeNeverEndingSale(tokenId) {
   const salesConfig = {
     saleStart: BigInt(Math.floor(Date.now() / 1000)),
     saleEnd: BigInt(4102444800),
-    maxTokensPerAddress: BigInt(0),
-    pricePerToken: ethers.parseUnits("0", "ether"),
+    maxTokensPerAddress: BigInt(0), // Unlimited tokens per address
+    pricePerToken: ethers.parseUnits("0.000069", "ether"), // Set price to 69 sparks (0.000069 ETH)
     fundsRecipient: recipientAddress
   };
+
+  // Log the salesConfig parameters
+  console.log("Sales Configuration Parameters:");
+  console.log("saleStart:", salesConfig.saleStart.toString());
+  console.log("saleEnd:", salesConfig.saleEnd.toString());
+  console.log("maxTokensPerAddress:", salesConfig.maxTokensPerAddress.toString());
+  console.log("pricePerToken (in wei):", salesConfig.pricePerToken.toString());
+  console.log("fundsRecipient:", salesConfig.fundsRecipient);
 
   const saleStrategyInterface = new ethers.Interface([
     "function setSale(uint256 tokenId, (uint64 saleStart, uint64 saleEnd, uint64 maxTokensPerAddress, uint96 pricePerToken, address fundsRecipient) salesConfig)"
@@ -189,7 +205,7 @@ async function startFreeNeverEndingSale(tokenId) {
 
     console.log("Transaction sent, awaiting confirmation...");
     await tx3.wait();
-    console.log("Free, never-ending sale started for token:", tokenId.toString());
+    console.log("Sale with price 69 sparks started for token:", tokenId.toString());
   } catch (error) {
     console.error("Error starting sale:", error);
     throw error;

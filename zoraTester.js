@@ -3,8 +3,8 @@ const { createToken, createTokenOnExistingContract } = require('./zora.js');
 // Function to create a new ERC-1155 contract and token with specified metadata
 async function addTokenToExistingContract() {
   // Define contract metadata
-  const tokenName = "test token3";
-  const tokenUriImageUrl = "https://heads.mfers.dev/100.png";   // Sample token image URL
+  const tokenName = "final test1";
+  const tokenUriImageUrl = "https://heads.mfers.dev/101.png";   // Sample token image URL
   const description = "test description"
 
   console.log("Creating new contract with metadata:");
