@@ -46,7 +46,7 @@ const testWebhookData = {
       "active_status": "inactive",
       "power_badge": false
     },
-    "text": "@mfergpt generate an image of a mfer surfing.",
+    "text": "@mfergpt sorry had a bug and fixedx it.  once more: will you please mint this file: https://iili.io/2I2XQRe.png",
     "timestamp": "2024-09-15T23:14:56.000Z",
     "embeds": [],
     "reactions": {

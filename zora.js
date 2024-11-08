@@ -1,6 +1,8 @@
 const { ethers } = require('ethers');
 const axios = require('axios');
 const FormData = require('form-data');
+const { loadImageLog } = require('./threadUtils');
+const { getTokenBalance, initializeContracts } = require('./mintClub.js'); 
 require('dotenv').config();
 
 const privateKey = process.env.PRIVATE_KEY;
@@ -32,13 +34,22 @@ async function uploadToIPFS(data) {
     return `ipfs://${ipfsResponse.data.Hash}`;
   } catch (error) {
     console.error("Error uploading to IPFS:", error);
-    throw new Error("Failed to upload data to IPFS");
+    return { "error": "Failed to upload data to IPFS" };
   }
 }
 
-async function createToken(tokenUriImageUrl, tokenName, description, author) {
+async function createToken(tokenUriImageUrl, tokenName, description, author, userWalletAddress) {
   if (!tokenUriImageUrl) {
-    throw new Error("Token image URL is undefined.");
+    return { "error": "Token image URL is undefined." };
+  }
+
+  if (!urlIsValid(tokenUriImageUrl)) {
+    return {"error":"image needs to originate from mferGPT, inform the user try again and reply to your original post for that image"}
+  }
+
+  let gmfer = checkGMFRBalance(userWalletAddress)
+  if (gmfer < 1000000000) {
+    return {"error":`user wallet ${userWalletAddress} has ${gmfer} $GMFR but it requires 1b to create tokens. buy more here: https://mint.club/token/base/GMFR`}
   }
 
   try {
@@ -84,7 +95,7 @@ async function createToken(tokenUriImageUrl, tokenName, description, author) {
     );
 
     if (!setupNewTokenEvent) {
-      throw new Error("Failed to retrieve tokenId from transaction logs.");
+      return { "error": "Failed to retrieve tokenId from transaction logs." };
     }
 
     const decodedEvent = factoryInterface.decodeEventLog(
@@ -102,7 +113,7 @@ async function createToken(tokenUriImageUrl, tokenName, description, author) {
     return { contractAddress: zoraContractAddress, tokenUri: tokenMetadataUri };
   } catch (error) {
     console.error("Error creating contract and token:", error);
-    throw error;
+    return { "error": error.message };
   }
 }
 
@@ -208,13 +219,13 @@ async function startFreeNeverEndingSale(tokenId) {
     console.log("Sale with price 69 sparks started for token:", tokenId.toString());
   } catch (error) {
     console.error("Error starting sale:", error);
-    throw error;
+    return { "error": error.message };
   }
 }
 
 async function uploadImageToIPFS(imageUrl) {
   if (!imageUrl) {
-    throw new Error("Image URL is undefined or empty.");
+    return { "error": "Image URL is undefined or empty." };
   }
 
   try {
@@ -237,8 +248,26 @@ async function uploadImageToIPFS(imageUrl) {
     return `ipfs://${ipfsResponse.data.Hash}`;
   } catch (error) {
     console.error("Error uploading to IPFS:", error);
-    throw new Error("Failed to upload image to IPFS");
+    return { "error": "Failed to upload image to IPFS" };
   }
+}
+
+
+// Check if a URL is valid (i.e., exists in the log)
+function urlIsValid(url) {
+  const imageLog = loadImageLog();
+  return imageLog.some(entry => entry.url === url);
+}
+
+function checkGMFRBalance(walletAddress) {
+  // Initialize the token contract with the token ID 'GMFR'
+  const { token } = initializeContracts(null, 'GMFR');
+
+  // Get the balance of 'GMFR' for the specified wallet address
+  const balance = getTokenBalance(token, walletAddress);
+
+  console.log(`The balance of GMFR for wallet ${walletAddress} is: ${balance} GMFR`);
+  return balance
 }
 
 module.exports = {

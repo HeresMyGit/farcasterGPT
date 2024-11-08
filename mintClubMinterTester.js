@@ -1,4 +1,5 @@
 const { createAndMintNFT } = require('./mintClubMinter.js'); // Assuming mintClubMinter.js has the required functions
+const { getTokenBalance, initializeContracts } = require('./mintClub.js'); 
 
 // Function to create a new ERC-1155 contract and token with specified metadata
 async function createNewContractAndToken() {
@@ -27,4 +28,6 @@ async function createNewContractAndToken() {
 }
 
 
-createNewContractAndToken();
+
+// createNewContractAndToken();
+

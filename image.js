@@ -36,6 +36,8 @@ async function generateImage(prompt) {
     const logEntry = { timestamp: new Date().toISOString(), url: imageUrl };
     saveImageLog(logEntry);
 
+
+
     return imageUrl;
   } catch (error) {
     console.error('Error generating image:', error);
@@ -43,13 +45,6 @@ async function generateImage(prompt) {
   }
 }
 
-// Check if a URL is valid (i.e., exists in the log)
-function urlIsValid(url) {
-  const imageLog = loadImageLog();
-  return imageLog.some(entry => entry.url === url);
-}
-
 module.exports = {
-  generateImage,
-  urlIsValid
+  generateImage
 };

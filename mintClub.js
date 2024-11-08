@@ -54,6 +54,35 @@ async function getTokenDetails(token) {
   }
 }
 
+// **New Function: Get Token Balance for a Given Wallet Address**
+async function getTokenBalance(token, walletAddress) {
+  if (!token) {
+    console.error("Token contract not initialized.");
+    return { error: "Token contract not initialized" };
+  }
+
+  try {
+    console.log(`Fetching balance for wallet address: ${walletAddress}`);
+
+    // Fetch the raw balance (in token's smallest unit)
+    const rawBalance = await token.getBalanceOf(walletAddress);
+
+    // Fetch token details to get decimals
+    const details = await token.getDetail();
+    const { decimals } = details.info;
+
+    // Adjust balance for decimals
+    const adjustDecimals = (value) => Number(value) / Math.pow(10, decimals);
+    const formattedBalance = adjustDecimals(rawBalance);
+
+    console.log(`Balance of GMFR for wallet ${walletAddress}: ${formattedBalance} GMFR`);
+    return formattedBalance;
+  } catch (error) {
+    console.error("Error fetching token balance:", error);
+    return { error: "Error fetching token balance" };
+  }
+}
+
 // Buy NFT tokens
 async function buyTokens(nft, amount) {
   if (!nft) {
@@ -147,21 +176,9 @@ async function createToken(token, {
 module.exports = {
   initializeContracts,
   getTokenDetails,
+  getTokenBalance, // Export the new function
   buyTokens,
   sellTokens,
   createNFT,
   createToken,
 };
-
-// const { token } = initializeContracts(null, 'GMFR'); // Replace 'GMFR' with your token contract ID if different
-// const token = mintclub.network('base').token('$SARTOSHI');
-// // Fetch and log the total supply without printing steps
-// getTokenDetails(token).then((supply) => {
-//   // Clone the supply object and remove the steps property for cleaner logging
-  // const supplyWithoutSteps = { ...supply };
-  // delete supplyWithoutSteps.steps;
-
-//   console.log("Total Supply of MortyMee6 NFT at script end (without steps):", supplyWithoutSteps);
-// }).catch((error) => {
-//   console.error("Error in fetching total supply at script end:", error);
-// });

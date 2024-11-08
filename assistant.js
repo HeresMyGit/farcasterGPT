@@ -10,6 +10,7 @@ const {
 const { getMferDescription } = require('./mfer.js');
 const { generateImage } = require('./image.js');
 const { interpretUrl } = require('./attachments.js');
+const { createToken } = require('./zora.js')
 const farcaster = require('./farcaster');
 const mintclub = require('./mintClub');
 const degen = require('./degen');
@@ -329,6 +330,38 @@ async function handleRequiresAction(run, threadId) {
             tool_call_id: tool.id,
             output: JSON.stringify(tokenDetails) // Return formatted token details
           };
+        } else if (tool.function.name === "mintArtwork") {
+          // Extract parameters
+          const { tokenUriImageUrl, tokenName, description, author } = JSON.parse(tool.function.arguments);
+
+          // Validate that all required parameters are provided
+          if (!tokenUriImageUrl || !tokenName || !description || !author) {
+            return {
+              tool_call_id: tool.id,
+              output: JSON.stringify({ error: "All parameters (tokenUriImageUrl, tokenName, description, author) are required." })
+            };
+          }
+
+          console.log(`Minting artwork with image URL: ${tokenUriImageUrl}, name: ${tokenName}, description: ${description}, author: ${author}`);
+
+          try {
+            // Call the mintArtwork function
+            const result = await createToken(tokenUriImageUrl, tokenName, description, author);
+
+            // Return the result
+            return {
+              tool_call_id: tool.id,
+              output: JSON.stringify(result)
+            };
+          } catch (error) {
+            console.error(`Error minting artwork: ${error.message}`);
+
+            // Return error
+            return {
+              tool_call_id: tool.id,
+              output: JSON.stringify({ error: error.message })
+            };
+          }
         } else {
           console.warn(`No handler for tool: ${tool.function.name}`);
           return {
