@@ -9,15 +9,18 @@ const privateKey = process.env.PRIVATE_KEY;
 const infuraProjectId = process.env.INFURA_PROJECT_ID;
 const infuraProjectSecret = process.env.INFURA_PROJECT_SECRET;
 
-const recipientAddress = ethers.getAddress("0xc1c8f153e18b93a3a1ec3cbd0e3f9b38159d2644"); // renamed from creatorAddress to recipientAddress
-const tokenCreatorAddress = ethers.getAddress("0x210CdB70BfCA0De607eC219c10bFB6132e4d3a04"); // the true address that created the token
-const zoraContractAddress = ethers.getAddress("0x339563f98180dda919b9efc56f4f74c2e0b68dd0"); // zora sepolia
+// const recipientAddress = ethers.getAddress("0x210CdB70BfCA0De607eC219c10bFB6132e4d3a04"); // zora sepolia
+const recipientAddress = ethers.getAddress("0x2119ff364fbF1Ae11688f781104caADa673D0194"); // base PROD
+// const tokenCreatorAddress = ethers.getAddress("0x210CdB70BfCA0De607eC219c10bFB6132e4d3a04"); // zora sepolia
+const tokenCreatorAddress = ethers.getAddress("0x3b54621FE962ee8E5283f2429B800e2E212c9a02"); // base PROD
+// const zoraContractAddress = ethers.getAddress("0x339563f98180dda919b9efc56f4f74c2e0b68dd0"); // zora sepolia
 // const zoraContractAddress = ethers.getAddress("0x4fceb2481b032bbe7d2bfbce838200ac45651946"); // base test
-const fixedPriceSaleStrategyAddress = ethers.getAddress("0x6d28164c3ce04a190d5f9f0f8881fc807ead975a"); // zora sepolia
-// const fixedPriceSaleStrategyAddress = ethers.getAddress("0x04E2516A2c207E84a1839755675dfd8eF6302F0a"); // base test
+const zoraContractAddress = ethers.getAddress("0xe2559ded6fdec98e68b40d7c382c502949c975fb"); // base PROD
+// const fixedPriceSaleStrategyAddress = ethers.getAddress("0x6d28164c3ce04a190d5f9f0f8881fc807ead975a"); // zora sepolia
+const fixedPriceSaleStrategyAddress = ethers.getAddress("0x04E2516A2c207E84a1839755675dfd8eF6302F0a"); // base PROD/TEST
 
-const provider = new ethers.JsonRpcProvider('https://sepolia.rpc.zora.energy');
-// const provider = new ethers.JsonRpcProvider('https://mainnet.base.org'); 
+// const provider = new ethers.JsonRpcProvider('https://sepolia.rpc.zora.energy'); // zora sepolia
+const provider = new ethers.JsonRpcProvider('https://mainnet.base.org'); //base
 const wallet = new ethers.Wallet(privateKey, provider);
 
 async function uploadToIPFS(data) {
@@ -47,23 +50,23 @@ async function createToken(tokenUriImageUrl, tokenName, description, artist, use
     return { "error": "Token image URL is undefined." };
   }
 
-  // if (!urlIsValid(tokenUriImageUrl)) {
-  //   console.error("image needs to originate from mferGPT, inform the user try again and reply to your original post for that image")
-  //   return {"error":"image needs to originate from mferGPT, inform the user try again and reply to your original post for that image"}
-  // }
+  if (!urlIsValid(tokenUriImageUrl)) {
+    console.error("image needs to originate from mferGPT, inform the user try again and reply to your original post for that image")
+    return {"error":"image needs to originate from mferGPT, inform the user try again and reply to your original post for that image"}
+  }
 
   if (!urlIsNew(tokenUriImageUrl)) {
     console.error("this image has already been minted")
     return {"error":"this image has already been minted"}
   }
 
-  // let gmfer = await checkGMFRBalance(userWalletAddress)
-  // console.warn(`user wallet ${userWalletAddress} has ${gmfer} gmfer`)
-  // let hasHoldings = gmfer >= 2500000
-  // if (hasHoldings != true) {
-  //   console.error(`user wallet ${userWalletAddress} has ${gmfer} $GMFR but it requires holding 2.5million $GMFR to create tokens`)
-  //   return {"error":`user wallet ${userWalletAddress} has ${gmfer} $GMFR but it requires holding 2.5million $GMFR to create tokens. buy more here: https://mint.club/token/base/GMFR`}
-  // }
+  let gmfer = await checkGMFRBalance(userWalletAddress)
+  console.warn(`user wallet ${userWalletAddress} has ${gmfer} gmfer`)
+  let hasHoldings = gmfer >= 2500000
+  if (hasHoldings != true) {
+    console.error(`user wallet ${userWalletAddress} has ${gmfer} $GMFR but it requires holding 2.5million $GMFR to create tokens`)
+    return {"error":`user wallet ${userWalletAddress} has ${gmfer} $GMFR but it requires holding 2.5million $GMFR to create tokens. buy more here: https://mint.club/token/base/GMFR`}
+  }
 
   // console.warn("WOULD CONTINUE")
   // console.warn("WOULD CONTINUE")
@@ -147,10 +150,19 @@ async function createToken(tokenUriImageUrl, tokenName, description, artist, use
     const logEntry = { timestamp: new Date().toISOString(), url: tokenUriImageUrl };
     saveMintLog(logEntry);
 
+    // Airdrop the token to the tokenCreatorAddress
+    try {
+      await airdropToken(tokenId, tokenCreatorAddress);
+    } catch (airdropError) {
+      console.warn("Airdrop failed:", airdropError.message);
+    }
+
     // Start the sale
     await startFreeNeverEndingSale(tokenId);
 
-    return { contractAddress: zoraContractAddress, tokenUri: tokenMetadataUri };
+    let link = `https://zora.co/collect/base:${zoraContractAddress}/${tokenId}`
+
+    return { link: link };
   } catch (error) {
     console.error("Error creating contract and token:", error);
     return { "error": error.message };
@@ -173,7 +185,7 @@ async function startFreeNeverEndingSale(tokenId) {
     saleStart: BigInt(Math.floor(Date.now() / 1000)),
     saleEnd: BigInt(4102444800),
     maxTokensPerAddress: BigInt(0), // Unlimited tokens per address
-    pricePerToken: ethers.parseUnits("0.000069", "ether"), // Set price to 69 sparks (0.000069 ETH)
+    pricePerToken: ethers.parseUnits("0.000420", "ether"), // Set price to 69 sparks (0.000069 ETH)
     fundsRecipient: recipientAddress
   };
 
@@ -260,6 +272,32 @@ async function startFreeNeverEndingSale(tokenId) {
   } catch (error) {
     console.error("Error starting sale:", error);
     return { "error": error.message };
+  }
+}
+
+async function airdropToken(tokenId, recipientAddress) {
+  try {
+    const creatorContractABI = [
+      "function adminMint(address recipient, uint256 tokenId, uint256 quantity, bytes data) external"
+    ];
+
+    const creatorContract = new ethers.Contract(
+      zoraContractAddress,
+      creatorContractABI,
+      wallet
+    );
+
+    console.log(`Airdropping token ID ${tokenId} to ${recipientAddress}...`);
+
+    // Call adminMint with a quantity of 1 and empty data
+    const tx = await creatorContract.adminMint(recipientAddress, tokenId, 1, "0x");
+    console.log("Transaction sent, awaiting confirmation...");
+    await tx.wait();
+
+    console.log(`Token ID ${tokenId} successfully airdropped to ${recipientAddress}`);
+  } catch (error) {
+    console.error("Error airdropping token:", error);
+    throw new Error("Airdrop failed: " + error.message);
   }
 }
 
