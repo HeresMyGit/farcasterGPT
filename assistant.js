@@ -332,21 +332,30 @@ async function handleRequiresAction(run, threadId) {
           };
         } else if (tool.function.name === "mint_artwork") {
           // Extract parameters
-          const { tokenUriImageUrl, tokenName, description, artist, userWalletAddress } = JSON.parse(tool.function.arguments);
+          const { tokenUriImageUrl, tokenName, description, artist, userWalletAddress, mferID, extraTraits } = JSON.parse(tool.function.arguments);
 
           // Validate that all required parameters are provided
           if (!tokenUriImageUrl || !tokenName || !description || !artist || !userWalletAddress) {
             return {
               tool_call_id: tool.id,
-              output: JSON.stringify({ error: "All parameters (tokenUriImageUrl, tokenName, description, artist, userWalletAddress) are required." })
+              output: JSON.stringify({ error: "All required parameters (tokenUriImageUrl, tokenName, description, artist, userWalletAddress) are required." })
             };
           }
 
           console.log(`Minting artwork with image URL: ${tokenUriImageUrl}, name: ${tokenName}, description: ${description}, artist: ${artist}, user wallet: ${userWalletAddress}`);
 
+          // Log mferID and extraTraits if available
+          if (mferID) {
+            console.log(`mferID: ${mferID}`);
+          }
+
+          if (extraTraits) {
+            console.log(`extraTraits: ${JSON.stringify(extraTraits)}`);
+          }
+
           try {
-            // Call the mintArtwork function
-            const result = await createToken(tokenUriImageUrl, tokenName, description, artist, userWalletAddress);
+            // Call the createToken function, passing mferID and extraTraits if available
+            const result = await createToken(tokenUriImageUrl, tokenName, description, artist, userWalletAddress, mferID, extraTraits);
 
             // Return the result
             return {

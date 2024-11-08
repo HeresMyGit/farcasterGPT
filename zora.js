@@ -1,7 +1,7 @@
 const { ethers } = require('ethers');
 const axios = require('axios');
 const FormData = require('form-data');
-const { loadImageLog } = require('./threadUtils');
+const { loadImageLog, loadMintLog, saveMintLog } = require('./threadUtils');
 const { getTokenBalance, initializeContracts } = require('./mintClub.js'); 
 require('dotenv').config();
 
@@ -11,10 +11,13 @@ const infuraProjectSecret = process.env.INFURA_PROJECT_SECRET;
 
 const recipientAddress = ethers.getAddress("0xc1c8f153e18b93a3a1ec3cbd0e3f9b38159d2644"); // renamed from creatorAddress to recipientAddress
 const tokenCreatorAddress = ethers.getAddress("0x210CdB70BfCA0De607eC219c10bFB6132e4d3a04"); // the true address that created the token
-const zoraContractAddress = ethers.getAddress("0x339563f98180dda919b9efc56f4f74c2e0b68dd0");
-const fixedPriceSaleStrategyAddress = ethers.getAddress("0x6d28164c3ce04a190d5f9f0f8881fc807ead975a");
+const zoraContractAddress = ethers.getAddress("0x339563f98180dda919b9efc56f4f74c2e0b68dd0"); // zora sepolia
+// const zoraContractAddress = ethers.getAddress("0x4fceb2481b032bbe7d2bfbce838200ac45651946"); // base test
+const fixedPriceSaleStrategyAddress = ethers.getAddress("0x6d28164c3ce04a190d5f9f0f8881fc807ead975a"); // zora sepolia
+// const fixedPriceSaleStrategyAddress = ethers.getAddress("0x04E2516A2c207E84a1839755675dfd8eF6302F0a"); // base test
 
 const provider = new ethers.JsonRpcProvider('https://sepolia.rpc.zora.energy');
+// const provider = new ethers.JsonRpcProvider('https://mainnet.base.org'); 
 const wallet = new ethers.Wallet(privateKey, provider);
 
 async function uploadToIPFS(data) {
@@ -38,20 +41,29 @@ async function uploadToIPFS(data) {
   }
 }
 
-async function createToken(tokenUriImageUrl, tokenName, description, artist, userWalletAddress) {
+async function createToken(tokenUriImageUrl, tokenName, description, artist, userWalletAddress, mferID, extraTraits) {
   if (!tokenUriImageUrl) {
+    console.error("Token image URL is undefined.")
     return { "error": "Token image URL is undefined." };
   }
 
-  if (!urlIsValid(tokenUriImageUrl)) {
-    return {"error":"image needs to originate from mferGPT, inform the user try again and reply to your original post for that image"}
+  // if (!urlIsValid(tokenUriImageUrl)) {
+  //   console.error("image needs to originate from mferGPT, inform the user try again and reply to your original post for that image")
+  //   return {"error":"image needs to originate from mferGPT, inform the user try again and reply to your original post for that image"}
+  // }
+
+  if (!urlIsNew(tokenUriImageUrl)) {
+    console.error("this image has already been minted")
+    return {"error":"this image has already been minted"}
   }
 
-  let gmfer = checkGMFRBalance(userWalletAddress)
-  let hasHoldings = gmfer < 2500000
-  if (hasHoldings != true) {
-    return {"error":`user wallet ${userWalletAddress} has ${gmfer} $GMFR but it requires 1b to create tokens. buy more here: https://mint.club/token/base/GMFR`}
-  }
+  // let gmfer = await checkGMFRBalance(userWalletAddress)
+  // console.warn(`user wallet ${userWalletAddress} has ${gmfer} gmfer`)
+  // let hasHoldings = gmfer >= 2500000
+  // if (hasHoldings != true) {
+  //   console.error(`user wallet ${userWalletAddress} has ${gmfer} $GMFR but it requires holding 2.5million $GMFR to create tokens`)
+  //   return {"error":`user wallet ${userWalletAddress} has ${gmfer} $GMFR but it requires holding 2.5million $GMFR to create tokens. buy more here: https://mint.club/token/base/GMFR`}
+  // }
 
   // console.warn("WOULD CONTINUE")
   // console.warn("WOULD CONTINUE")
@@ -75,6 +87,20 @@ async function createToken(tokenUriImageUrl, tokenName, description, artist, use
         { trait_type: "prompt artist", value: artist }
       ]
     };
+
+    // Conditionally add mferID if available
+    if (mferID) {
+      metadata.attributes.push({ trait_type: "mfer #", value: `${mferID}` });
+    }
+
+    // Conditionally add extraTraits if available and formatted correctly
+    if (extraTraits && Array.isArray(extraTraits)) {
+      extraTraits.forEach(trait => {
+        if (trait.trait_type && trait.value) {
+          metadata.attributes.push(trait);
+        }
+      });
+    }
 
     console.log("Uploading metadata to IPFS...");
     const tokenMetadataUri = await uploadToIPFS(metadata);
@@ -104,6 +130,7 @@ async function createToken(tokenUriImageUrl, tokenName, description, artist, use
     );
 
     if (!setupNewTokenEvent) {
+      console.warn("Failed to retrieve tokenId from transaction logs.")
       return { "error": "Failed to retrieve tokenId from transaction logs." };
     }
 
@@ -115,6 +142,10 @@ async function createToken(tokenUriImageUrl, tokenName, description, artist, use
     const tokenId = decodedEvent.tokenId;
 
     console.log("Retrieved tokenId:", tokenId.toString());
+
+    // Log the image URL with the timestamp
+    const logEntry = { timestamp: new Date().toISOString(), url: tokenUriImageUrl };
+    saveMintLog(logEntry);
 
     // Start the sale
     await startFreeNeverEndingSale(tokenId);
@@ -234,6 +265,7 @@ async function startFreeNeverEndingSale(tokenId) {
 
 async function uploadImageToIPFS(imageUrl) {
   if (!imageUrl) {
+    console.warn("Image URL is undefined or empty.");
     return { "error": "Image URL is undefined or empty." };
   }
 
@@ -268,15 +300,22 @@ function urlIsValid(url) {
   return imageLog.some(entry => entry.url === url);
 }
 
-function checkGMFRBalance(walletAddress) {
+// Check if a URL is new (i.e., not already minted)
+function urlIsNew(url) {
+  const mintLog = loadMintLog();
+  const old = mintLog.some(entry => entry.url === url);
+  return !old
+}
+
+async function checkGMFRBalance(walletAddress) {
   // Initialize the token contract with the token ID 'GMFR'
   const { token } = initializeContracts(null, 'GMFR');
 
   // Get the balance of 'GMFR' for the specified wallet address
-  const balance = getTokenBalance(token, walletAddress);
+  const balance = await getTokenBalance(token, walletAddress);
 
   // Make sure to resolve the balance before creating the string
-  const logStatement = `The balance of GMFR for wallet ${walletAddress} is: ${balance} GMFR`;
+  const logStatement = `Theeeee balance of GMFR for wallet ${walletAddress} is: ${JSON.stringify(balance)} GMFR`;
 
   // Now, JSON.stringify the log statement
   const jsonString = JSON.stringify(logStatement);
