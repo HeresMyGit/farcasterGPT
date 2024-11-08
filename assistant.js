@@ -330,23 +330,23 @@ async function handleRequiresAction(run, threadId) {
             tool_call_id: tool.id,
             output: JSON.stringify(tokenDetails) // Return formatted token details
           };
-        } else if (tool.function.name === "mintArtwork") {
+        } else if (tool.function.name === "mint_artwork") {
           // Extract parameters
-          const { tokenUriImageUrl, tokenName, description, author } = JSON.parse(tool.function.arguments);
+          const { tokenUriImageUrl, tokenName, description, artist, userWalletAddress } = JSON.parse(tool.function.arguments);
 
           // Validate that all required parameters are provided
-          if (!tokenUriImageUrl || !tokenName || !description || !author) {
+          if (!tokenUriImageUrl || !tokenName || !description || !artist || !userWalletAddress) {
             return {
               tool_call_id: tool.id,
-              output: JSON.stringify({ error: "All parameters (tokenUriImageUrl, tokenName, description, author) are required." })
+              output: JSON.stringify({ error: "All parameters (tokenUriImageUrl, tokenName, description, artist, userWalletAddress) are required." })
             };
           }
 
-          console.log(`Minting artwork with image URL: ${tokenUriImageUrl}, name: ${tokenName}, description: ${description}, author: ${author}`);
+          console.log(`Minting artwork with image URL: ${tokenUriImageUrl}, name: ${tokenName}, description: ${description}, artist: ${artist}, user wallet: ${userWalletAddress}`);
 
           try {
             // Call the mintArtwork function
-            const result = await createToken(tokenUriImageUrl, tokenName, description, author);
+            const result = await createToken(tokenUriImageUrl, tokenName, description, artist, userWalletAddress);
 
             // Return the result
             return {

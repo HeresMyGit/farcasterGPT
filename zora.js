@@ -38,7 +38,7 @@ async function uploadToIPFS(data) {
   }
 }
 
-async function createToken(tokenUriImageUrl, tokenName, description, author, userWalletAddress) {
+async function createToken(tokenUriImageUrl, tokenName, description, artist, userWalletAddress) {
   if (!tokenUriImageUrl) {
     return { "error": "Token image URL is undefined." };
   }
@@ -48,22 +48,31 @@ async function createToken(tokenUriImageUrl, tokenName, description, author, use
   }
 
   let gmfer = checkGMFRBalance(userWalletAddress)
-  if (gmfer < 1000000000) {
+  let hasHoldings = gmfer < 2500000
+  if (hasHoldings != true) {
     return {"error":`user wallet ${userWalletAddress} has ${gmfer} $GMFR but it requires 1b to create tokens. buy more here: https://mint.club/token/base/GMFR`}
   }
+
+  // console.warn("WOULD CONTINUE")
+  // console.warn("WOULD CONTINUE")
+  // console.warn("WOULD CONTINUE")
+  // console.warn("WOULD CONTINUE")
+  // console.warn("WOULD CONTINUE")
+  // console.warn("WOULD CONTINUE")
+  // return {"":""}
 
   try {
     console.log("Uploading image to IPFS...");
     const imageUri = await uploadImageToIPFS(tokenUriImageUrl);
     console.log("Image uploaded to IPFS:", imageUri);
 
-    // Create the metadata object including the author as the first attribute
+    // Create the metadata object including the artist as the first attribute
     const metadata = {
       name: tokenName,
       description: description,
       image: imageUri,
       attributes: [
-        { trait_type: "Author", value: author }
+        { trait_type: "prompt artist", value: artist }
       ]
     };
 
@@ -266,7 +275,13 @@ function checkGMFRBalance(walletAddress) {
   // Get the balance of 'GMFR' for the specified wallet address
   const balance = getTokenBalance(token, walletAddress);
 
-  console.log(`The balance of GMFR for wallet ${walletAddress} is: ${balance} GMFR`);
+  // Make sure to resolve the balance before creating the string
+  const logStatement = `The balance of GMFR for wallet ${walletAddress} is: ${balance} GMFR`;
+
+  // Now, JSON.stringify the log statement
+  const jsonString = JSON.stringify(logStatement);
+  console.log(jsonString);
+
   return balance
 }
 
