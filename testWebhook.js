@@ -46,7 +46,7 @@ const testWebhookData = {
       "active_status": "inactive",
       "power_badge": false
     },
-    "text": "@mfergpt sorry had a bug and fixedx it.  once more: will you please mint this file: https://iili.io/2I2XQRe.png",
+    "text": "@mfergpt what is my GMFR balance",
     "timestamp": "2024-09-15T23:14:56.000Z",
     "embeds": [],
     "reactions": {

@@ -62,7 +62,7 @@ async function getTokenBalance(token, walletAddress) {
   }
 
   try {
-    console.log(`Fetching balance for wallet address: ${walletAddress}`);
+    console.log(`Fetching ${token.symbol} balance for wallet address: ${walletAddress}`);
 
     // Fetch the raw balance (in token's smallest unit)
     const rawBalance = await token.getBalanceOf(walletAddress);
@@ -75,7 +75,7 @@ async function getTokenBalance(token, walletAddress) {
     const adjustDecimals = (value) => Number(value) / Math.pow(10, decimals);
     const formattedBalance = adjustDecimals(rawBalance);
 
-    console.log(`Balance of GMFR for wallet ${walletAddress}: ${formattedBalance} GMFR`);
+    console.log(`Balance of ${token.symbol} for wallet ${walletAddress}: ${formattedBalance} ${token.symbol}`);
     return formattedBalance;
   } catch (error) {
     console.error("Error fetching token balance:", error);

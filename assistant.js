@@ -371,6 +371,19 @@ async function handleRequiresAction(run, threadId) {
               output: JSON.stringify({ error: error.message })
             };
           }
+        } else if (tool.function.name === 'fetch_mint_club_token_balance') {
+          const { wallet, ticker } = JSON.parse(tool.function.arguments);
+          console.log(`Fetching Mint Club token balance for wallet: ${wallet}, Ticker: ${ticker}`);
+
+          console.log(`Fetching token details for contract ID: ${ticker} on network: Base`);
+          const { token } = mintclub.initializeContracts(null, ticker, "base"); // Initialize with specified network
+          
+          const result = await mintclub.getTokenBalance(token, wallet);
+          
+          return {
+            tool_call_id: tool.id,
+            output: JSON.stringify(result)
+          };
         } else {
           console.warn(`No handler for tool: ${tool.function.name}`);
           return {
@@ -664,16 +677,33 @@ async function handleWebhook(req, res) {
       console.log(`Using existing OpenAI thread ID: ${threadId} for Farcaster thread ID: ${farcasterThreadId}`);
     }
 
-    const personalPromptText = personalPrompt.getPersonalPrompt(authorFID);
+    // Get the verified Ethereum address of the user who sent the message
+    const verifiedEthereumAddress = hookData.data.author.verified_addresses.eth_addresses[0] || null;
 
-    // Step 2: Add the initial user message to the thread
-    // await createMessage(threadId, castText);
-    let userMessage = `First, look up this thread to get context. Always do this in case there have been more messages since you last interacted: Farcaster message hash: ${messageHash}\n\n------\n\nRemember, never describe the cast, just simply respond to it as if you were replying directly to that user.  Now, respond to the latest cast from ${authorUsername}: ${castText}`;
+    // Retrieve the personal prompt for the authorFID, if available
+    const personalPromptText = personalPrompt.getPersonalPrompt(authorFID) || null;
 
+    // Create a more machine-friendly user message using JSON to send data
+    let userMessageObject = {
+      instructions: [
+        "First, look up this thread to get context. Always do this in case there have been more messages since you last interacted.",
+        "Remember, never describe the cast, just simply respond to it as if you were replying directly to that user.",
+        `Now, respond to the latest cast from ${authorUsername}.`
+      ],
+      data: {
+        messageHash: messageHash,
+        authorUsername: authorUsername,
+        verifiedEthereumAddress: verifiedEthereumAddress,
+        castText: castText
+      }
+    };
+
+    // Include personalPrompt in the data if it's available
     if (personalPromptText) {
-      userMessage = `${personalPromptText}\n\n${userMessage}`;
-      console.log(`Prepended personal prompt for FID ${authorFID}: ${personalPromptText}`);
+      userMessageObject.data.personalPrompt = personalPromptText;
     }
+
+    let userMessage = JSON.stringify(userMessageObject, null, 2);
 
     await createMessage(threadId, userMessage);
 
@@ -751,7 +781,7 @@ async function handleWebhook(req, res) {
     // res.status(200).send('Webhook received and response sent!');
   } catch (error) {
     console.error('Error processing webhook:', error);
-    res.status(500).send('Server error');
+    res.status(200).send('Server error');
   }
 }
 
