@@ -711,6 +711,14 @@ async function handleWebhook(req, res) {
     let botMessage = 'Sorry, I couldn’t complete the request at this time.';
     const run = await runThread(threadId, authorUsername);
 
+    if (!run || !run.status) {
+      console.error('Run object is undefined or missing a status property.');
+      const errorMessage = 'sorry mfer my circuits got scrambled\n\npls try again in a minute\n\n🤖-\'';
+      await neynarClient.publishCast(process.env.SIGNER_UUID, errorMessage, { replyTo: messageHash });
+      res.status(200).send('OpenAI run failed');
+      return;
+    }
+
     // Check if the run has completed successfully
     if (run.status === 'completed') {
       const messages = await openai.beta.threads.messages.list(run.thread_id);
