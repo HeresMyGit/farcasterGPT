@@ -11,7 +11,8 @@ const {
   CONSUMER_KEY,
   CONSUMER_SECRET,
   ACCESS_TOKEN,
-  ACCESS_TOKEN_SECRET
+  ACCESS_TOKEN_SECRET,
+  BEARER_TOKEN
 } = process.env;
 
 // Initialize OAuth 1.0a with HMAC-SHA1 signature method
@@ -43,6 +44,49 @@ function generateAuthHeader(url, method) {
   }, token));
 }
 
+async function fetchMostPopularMferTweet() {
+  console.log('Fetching the most popular $mfer tweet from the last 6 hours...');
+  try {
+    const now = new Date();
+    const sixHoursAgo = new Date(now.getTime() - 6 * 60 * 60 * 1000).toISOString();
+    const baseURL = 'https://api.twitter.com/2/tweets/search/recent';
+    const queryParams = `query=mfercoin&tweet.fields=public_metrics,referenced_tweets,attachments&media.fields=url&expansions=attachments.media_keys&start_time=${sixHoursAgo}&max_results=10`;
+    const searchURL = `${baseURL}?${queryParams}`;
+
+    // Use Bearer Token for authorization
+    const response = await axios.get(searchURL, {
+      headers: {
+        Authorization: `Bearer ${BEARER_TOKEN}`,
+        'Content-Type': 'application/json',
+        'User-Agent': 'PostmanRuntime/7.42.0',
+        'Accept': '*/*',
+      }
+    });
+
+    // Parse the response
+    const tweets = response.data.data;
+
+    if (!tweets || tweets.length === 0) {
+      console.log('No tweets found for $mfer in the last 6 hours.');
+      return null;
+    }
+
+    // Log all tweets for debugging
+    console.log('Fetched tweets:', JSON.stringify(tweets, null, 2));
+
+    // Find the most popular tweet based on likes
+    const mostPopularTweet = tweets.reduce((prev, current) =>
+      (current.public_metrics.like_count > prev.public_metrics.like_count ? current : prev)
+    );
+
+    console.log('Most popular tweet:', JSON.stringify(mostPopularTweet, null, 2));
+    return mostPopularTweet;
+  } catch (error) {
+    console.error('Error fetching $mfer tweets:', error.response ? error.response.data : error.message);
+    return null;
+  }
+}
+
 // Function to upload media to Twitter
 async function uploadMedia(imagePath) {
   const url = 'https://upload.twitter.com/1.1/media/upload.json';
@@ -63,8 +107,8 @@ async function uploadMedia(imagePath) {
   return response.data.media_id_string;
 }
 
-// Main function to send a tweet with multiple images
-async function sendTweet(text, imagePaths = []) {
+// Main function to send a tweet with multiple images and optional quote-tweet
+async function sendTweet(text, imagePaths = [], quoteTweetId = null) {
   try {
     let media_ids = [];
 
@@ -86,6 +130,11 @@ async function sendTweet(text, imagePaths = []) {
       tweetData.media = { media_ids: media_ids };
     }
 
+    // Add quote-tweet functionality
+    if (quoteTweetId) {
+      tweetData.quote_tweet_id = quoteTweetId;
+    }
+
     const tweetURL = 'https://api.twitter.com/2/tweets';
     const authHeader = generateAuthHeader(tweetURL, 'POST');
 
@@ -96,7 +145,7 @@ async function sendTweet(text, imagePaths = []) {
         'Content-Type': 'application/json',
         'User-Agent': 'PostmanRuntime/7.42.0',
         'Accept': '*/*',
-      }
+      },
     });
 
     console.log('Tweet posted successfully:', response.data);
@@ -107,4 +156,5 @@ async function sendTweet(text, imagePaths = []) {
 
 module.exports = {
   sendTweet,
+  fetchMostPopularMferTweet,
 };

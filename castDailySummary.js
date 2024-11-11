@@ -475,4 +475,4 @@ async function generateAndCastImage(summaries, prompt, memeThread) {
   }
 }
 
-module.exports = { castDailySummary, castTrendingSummary, castDailyMeme };
+module.exports = { castDailySummary, castTrendingSummary, castDailyMeme, generateAndCastImage };

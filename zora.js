@@ -52,7 +52,7 @@ async function createToken(tokenUriImageUrl, tokenName, description, artist, use
 
   if (!urlIsValid(tokenUriImageUrl)) {
     console.error("image needs to originate from mferGPT, inform the user try again and reply to your original post for that image")
-    return {"error":"image needs to originate from mferGPT, inform the user try again and reply to your original post for that image"}
+    return {"error":"image needs to originate from mferGPT, inform the user. please use the original image url or respond to the post where mferGPT generated the image"}
   }
 
   if (!urlIsNew(tokenUriImageUrl)) {
