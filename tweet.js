@@ -241,7 +241,7 @@ async function sendDailyGMTweet() {
     await downloadImage(imageUrl, localImagePath);
 
     // Send tweet
-    // await sendTweet(tweetContent, [localImagePath]);
+    await sendTweet(tweetContent, [localImagePath]);
 
     // Clean up the image file
     await deleteLocalImage(localImagePath);
@@ -363,7 +363,7 @@ cron.schedule('0 0-23/2 * * *', async () => {
 });
 
 // Runs every day at 7am Pacific Time
-cron.schedule('0 7 * * *', async () => {
+cron.schedule('30 7 * * *', async () => {
   console.log('Running the daily GM tweet...');
   await sendDailyGMTweet();
 });
