@@ -4,9 +4,9 @@ const DEFAULT_NETWORK = 'base';
 const DEFAULT_DECIMALS = 18;
 
 // Initialize NFT and Token contracts
-function initializeContracts(nftContractId, tokenContractId, network = DEFAULT_NETWORK) {
+function initializeContracts(tokenContractId, network = DEFAULT_NETWORK) {
   const baseNetwork = mintclub.network(network);
-  const nft = nftContractId ? baseNetwork.nft(nftContractId) : null;
+  const nft = tokenContractId ? baseNetwork.nft(tokenContractId) : null;
   const token = tokenContractId ? baseNetwork.token(tokenContractId) : null;
 
   return { nft, token };

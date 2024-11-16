@@ -1,7 +1,7 @@
 const { ethers } = require('ethers');
 const axios = require('axios');
 const FormData = require('form-data');
-const { loadImageLog, loadMintLog, saveMintLog } = require('./threadUtils');
+const { loadImageLog, loadMintLog, saveMintLog, loadUserMints, saveUserMint, lastMintForUser  } = require('./threadUtils');
 const { getTokenBalance, initializeContracts } = require('./mintClub.js'); 
 require('dotenv').config();
 
@@ -9,19 +9,58 @@ const privateKey = process.env.PRIVATE_KEY;
 const infuraProjectId = process.env.INFURA_PROJECT_ID;
 const infuraProjectSecret = process.env.INFURA_PROJECT_SECRET;
 
-// const recipientAddress = ethers.getAddress("0x210CdB70BfCA0De607eC219c10bFB6132e4d3a04"); // zora sepolia
-const recipientAddress = ethers.getAddress("0x2119ff364fbF1Ae11688f781104caADa673D0194"); // base PROD
-// const tokenCreatorAddress = ethers.getAddress("0x210CdB70BfCA0De607eC219c10bFB6132e4d3a04"); // zora sepolia
-const tokenCreatorAddress = ethers.getAddress("0x3b54621FE962ee8E5283f2429B800e2E212c9a02"); // base PROD
-// const zoraContractAddress = ethers.getAddress("0x339563f98180dda919b9efc56f4f74c2e0b68dd0"); // zora sepolia
-// const zoraContractAddress = ethers.getAddress("0x4fceb2481b032bbe7d2bfbce838200ac45651946"); // base test
-const zoraContractAddress = ethers.getAddress("0xe2559ded6fdec98e68b40d7c382c502949c975fb"); // base PROD
-// const fixedPriceSaleStrategyAddress = ethers.getAddress("0x6d28164c3ce04a190d5f9f0f8881fc807ead975a"); // zora sepolia
-const fixedPriceSaleStrategyAddress = ethers.getAddress("0x04E2516A2c207E84a1839755675dfd8eF6302F0a"); // base PROD/TEST
+const ENVIRONMENTS = {
+    zoraSepolia: {
+        recipientAddress: "0x210CdB70BfCA0De607eC219c10bFB6132e4d3a04",
+        tokenCreatorAddress: "0x210CdB70BfCA0De607eC219c10bFB6132e4d3a04",
+        zoraContractAddress: "0x339563f98180dda919b9efc56f4f74c2e0b68dd0",
+        fixedPriceSaleStrategyAddress: "0x6d28164c3ce04a190d5f9f0f8881fc807ead975a",
+        rpcProvider: "https://sepolia.rpc.zora.energy"
+    },
+    baseTest: {
+        recipientAddress: "0x2119ff364fbF1Ae11688f781104caADa673D0194",
+        tokenCreatorAddress: "0x3b54621FE962ee8E5283f2429B800e2E212c9a02",
+        zoraContractAddress: "0x4fceb2481b032bbe7d2bfbce838200ac45651946",
+        fixedPriceSaleStrategyAddress: "0x04E2516A2c207E84a1839755675dfd8eF6302F0a",
+        rpcProvider: "https://base-goerli.blockpi.network/v1/rpc/public" // Base testnet example
+    },
+    baseProd: {
+        recipientAddress: "0x2119ff364fbF1Ae11688f781104caADa673D0194",
+        tokenCreatorAddress: "0x3b54621FE962ee8E5283f2429B800e2E212c9a02",
+        zoraContractAddress: "0xe2559ded6fdec98e68b40d7c382c502949c975fb",
+        fixedPriceSaleStrategyAddress: "0x04E2516A2c207E84a1839755675dfd8eF6302F0a",
+        rpcProvider: "https://mainnet.base.org"
+    }
+};
 
-// const provider = new ethers.JsonRpcProvider('https://sepolia.rpc.zora.energy'); // zora sepolia
-const provider = new ethers.JsonRpcProvider('https://mainnet.base.org'); //base
+// Set the environment: 'zoraSepolia', 'baseTest', or 'baseProd'
+// const selectedEnvironment = 'baseProd';
+// const selectedEnvironment = 'baseTest';
+const selectedEnvironment = 'zoraSepolia';
+
+// Load configuration
+const { recipientAddress, tokenCreatorAddress, zoraContractAddress, fixedPriceSaleStrategyAddress, rpcProvider } =
+    ENVIRONMENTS[selectedEnvironment];
+
+// Convert to ethers addresses
+const recipientAddressEthers = ethers.getAddress(recipientAddress);
+const tokenCreatorAddressEthers = ethers.getAddress(tokenCreatorAddress);
+const zoraContractAddressEthers = ethers.getAddress(zoraContractAddress);
+const fixedPriceSaleStrategyAddressEthers = ethers.getAddress(fixedPriceSaleStrategyAddress);
+
+const ONE_WEEK_IN_MS = 7 * 24 * 60 * 60 * 1000;
+
+// Setup provider and wallet
+const provider = new ethers.JsonRpcProvider(rpcProvider);
 const wallet = new ethers.Wallet(privateKey, provider);
+
+// Logging to ensure values are correct
+console.log("Using environment:", selectedEnvironment);
+console.log("Recipient Address:", recipientAddressEthers);
+console.log("Token Creator Address:", tokenCreatorAddressEthers);
+console.log("Zora Contract Address:", zoraContractAddressEthers);
+console.log("Fixed Price Sale Strategy Address:", fixedPriceSaleStrategyAddressEthers);
+console.log("RPC Provider:", rpcProvider);
 
 async function uploadToIPFS(data) {
   try {
@@ -60,19 +99,13 @@ async function createToken(tokenUriImageUrl, tokenName, description, artist, use
     return {"error":"this image has already been minted"}
   }
 
-  let gmfer = await checkGMFRBalance(userWalletAddress)
-  console.warn(`user wallet ${userWalletAddress} has ${gmfer} gmfer`)
-  let hasHoldings = gmfer >= 2500000
-  if (hasHoldings != true) {
-    console.error(`user wallet ${userWalletAddress} has ${gmfer} $GMFR but it requires holding 2.5million $GMFR to create tokens`)
-    return {"error":`user wallet ${userWalletAddress} has ${gmfer} $GMFR but it requires holding 2.5million $GMFR to create tokens. buy more here: https://mint.club/token/base/GMFR`}
+  // Check if the user is eligible to mint
+  const mintCheck = await canMint(userWalletAddress);
+  if (!mintCheck.eligible) {
+    console.error(mintCheck.message);
+    return { "error": mintCheck.message };
   }
 
-  // console.warn("WOULD CONTINUE")
-  // console.warn("WOULD CONTINUE")
-  // console.warn("WOULD CONTINUE")
-  // console.warn("WOULD CONTINUE")
-  // console.warn("WOULD CONTINUE")
   // console.warn("WOULD CONTINUE")
   // return {"":""}
 
@@ -126,6 +159,11 @@ async function createToken(tokenUriImageUrl, tokenName, description, artist, use
 
     const receipt = await tx2.wait();
     console.log("Token created successfully, transaction receipt:", receipt);
+
+    // Log the mint
+    const now = new Date();
+    saveUserMint(userWalletAddress, now.toISOString());
+    console.log(`Mint logged for user: ${userWalletAddress} at ${now.toISOString()}`);
 
     // Extract tokenId from the event logs
     const setupNewTokenEvent = receipt.logs.find(
@@ -347,7 +385,7 @@ function urlIsNew(url) {
 
 async function checkGMFRBalance(walletAddress) {
   // Initialize the token contract with the token ID 'GMFR'
-  const { token } = initializeContracts(null, 'GMFR');
+  const { token } = initializeContracts('GMFR');
 
   // Get the balance of 'GMFR' for the specified wallet address
   const balance = await getTokenBalance(token, walletAddress);
@@ -360,6 +398,33 @@ async function checkGMFRBalance(walletAddress) {
   console.log(jsonString);
 
   return balance
+}
+
+async function canMint(userWalletAddress) {
+  const now = new Date();
+  const lastMintDate = lastMintForUser(userWalletAddress);
+
+  // Check GMFR balance
+  const gmferBalance = await checkGMFRBalance(userWalletAddress);
+
+  // If the user holds at least 2.5 million GMFR, they can mint without restrictions
+  if (gmferBalance >= 2500000) {
+    return { eligible: true, message: "User holds sufficient GMFR to mint." };
+  }
+
+  // Check if the user minted in the last week
+  if (lastMintDate) {
+    const lastMintTimestamp = new Date(lastMintDate).getTime();
+    const timeSinceLastMint = now.getTime() - lastMintTimestamp;
+
+    if (timeSinceLastMint < ONE_WEEK_IN_MS) {
+      const daysRemaining = Math.ceil((ONE_WEEK_IN_MS - timeSinceLastMint) / (24 * 60 * 60 * 1000));
+      return { eligible: false, message: `You minted less than a week ago. Please wait ${daysRemaining} more days.` };
+    }
+  }
+
+  // If no restrictions apply, the user can mint
+  return { eligible: true, message: "User is eligible to mint." };
 }
 
 module.exports = {

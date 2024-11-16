@@ -255,27 +255,27 @@ async function sendDailyGMTweet() {
 // Function to post the most popular $mfer tweet to your account
 async function postMostPopularMferTweet() {
   console.log('Fetching the most popular $mfer tweet...');
-  // const mostPopularTweet = await fetchMostPopularMferTweet();
-  const mostPopularTweet = {
-  "edit_history_tweet_ids": [
-    "1855707106881556834"
-  ],
-  "id": "1855707106881556834",
-  "public_metrics": {
-    "retweet_count": 0,
-    "reply_count": 0,
-    "like_count": 2,
-    "quote_count": 0,
-    "bookmark_count": 0,
-    "impression_count": 70
-  },
-  "attachments": {
-    "media_keys": [
-      "16_1855707100300636160"
-    ]
-  },
-  "text": "Look at the market and growth with base. Deep Value is mfercoin and it’s not if but when. Light it up block out the noise and just watch that $mfer go on the run that wakes up normies! No one even knows BTC is 80K. A stick man going parabolic wakes us out of our bones globally https://t.co/0PxkzzlQcG"
-}
+  const mostPopularTweet = await fetchMostPopularMferTweet();
+//   const mostPopularTweet = {
+//   "edit_history_tweet_ids": [
+//     "1855707106881556834"
+//   ],
+//   "id": "1855707106881556834",
+//   "public_metrics": {
+//     "retweet_count": 0,
+//     "reply_count": 0,
+//     "like_count": 2,
+//     "quote_count": 0,
+//     "bookmark_count": 0,
+//     "impression_count": 70
+//   },
+//   "attachments": {
+//     "media_keys": [
+//       "16_1855707100300636160"
+//     ]
+//   },
+//   "text": "Look at the market and growth with base. Deep Value is mfercoin and it’s not if but when. Light it up block out the noise and just watch that $mfer go on the run that wakes up normies! No one even knows BTC is 80K. A stick man going parabolic wakes us out of our bones globally https://t.co/0PxkzzlQcG"
+// }
 
   if (mostPopularTweet) {
     const { text, id } = mostPopularTweet;
@@ -362,7 +362,7 @@ cron.schedule('0 0-23/2 * * *', async () => {
   await tweetAssistantResponse(prompt);
 });
 
-// Runs every day at 7am Pacific Time
+// // Runs every day at 7am Pacific Time
 cron.schedule('30 7 * * *', async () => {
   console.log('Running the daily GM tweet...');
   await sendDailyGMTweet();

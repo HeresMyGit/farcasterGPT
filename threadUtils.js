@@ -8,6 +8,8 @@ const USER_PROFILES_FILE = path.resolve(__dirname, '../farcasterGPT-Data/userPro
 const PERSONAL_PROMPTS_FILE = path.resolve(__dirname, '../farcasterGPT-Data/personalPrompts.json');
 const IMAGE_LOG_FILE = path.resolve(__dirname, '../farcasterGPT-Data/imageLog.json');
 const MINT_LOG_FILE = path.resolve(__dirname, '../farcasterGPT-Data/mintLog.json');
+const USER_MINT_FILE = path.resolve(__dirname, '../farcasterGPT-Data/userMint.json');
+
 
 
 // Load existing thread mappings from file
@@ -139,6 +141,28 @@ function saveMintLog(logEntry) {
   fs.writeFileSync(MINT_LOG_FILE, JSON.stringify(logs, null, 2));
 }
 
+// Load user mints from file
+function loadUserMints() {
+  if (fs.existsSync(USER_MINT_FILE)) {
+    const data = fs.readFileSync(USER_MINT_FILE, 'utf-8');
+    return JSON.parse(data);
+  }
+  return {};
+}
+
+// Save a new mint for a user to the file
+function saveUserMint(address, date) {
+  const userMints = loadUserMints();
+  userMints[address] = date; // Replace or create new entry
+  fs.writeFileSync(USER_MINT_FILE, JSON.stringify(userMints, null, 2));
+}
+
+// Get the last mint date for a user
+function lastMintForUser(address) {
+  const userMints = loadUserMints();
+  return userMints[address] || null; // Return the date if it exists, otherwise null
+}
+
 
 module.exports = {
   loadThreadMappings,
@@ -155,4 +179,7 @@ module.exports = {
   saveImageLog,
   loadMintLog,
   saveMintLog,
+  loadUserMints,
+  saveUserMint,
+  lastMintForUser,
 };
