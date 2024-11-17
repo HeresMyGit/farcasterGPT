@@ -187,8 +187,10 @@ async function createToken(tokenUriImageUrl, tokenName, description, artist, use
 
     console.log("Retrieved tokenId:", tokenId.toString());
 
+    let link = `https://zora.co/collect/base:${zoraContractAddress}/${tokenId}`
+
     // Log the image URL with the timestamp
-    const logEntry = { timestamp: new Date().toISOString(), url: tokenUriImageUrl };
+    const logEntry = { timestamp: new Date().toISOString(), url: tokenUriImageUrl, zora:link, name: tokenName, description: description, artist: artist };
     saveMintLog(logEntry);
 
     // Airdrop the token to the tokenCreatorAddress
@@ -201,8 +203,6 @@ async function createToken(tokenUriImageUrl, tokenName, description, artist, use
 
     // Start the sale
     await startFreeNeverEndingSale(tokenId);
-
-    let link = `https://zora.co/collect/base:${zoraContractAddress}/${tokenId}`
 
     return { link: link };
   } catch (error) {
