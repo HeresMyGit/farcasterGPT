@@ -3,11 +3,16 @@ const axios = require('axios');
 const FormData = require('form-data');
 const { loadImageLog, loadMintLog, saveMintLog, loadUserMints, saveUserMint, lastMintForUser  } = require('./threadUtils');
 const { getTokenBalance, initializeContracts } = require('./mintClub.js'); 
+const { SplitsClient } = require('@0xsplits/splits-sdk');
+const { createPublicClient, createWalletClient, http } = require('viem');
+const { privateKeyToAccount } = require('viem/accounts');
 require('dotenv').config();
 
 const privateKey = process.env.PRIVATE_KEY;
 const infuraProjectId = process.env.INFURA_PROJECT_ID;
 const infuraProjectSecret = process.env.INFURA_PROJECT_SECRET;
+const splitsApiKey = process.env.SPLITS_API_KEY; 
+
 
 const ENVIRONMENTS = {
     zoraSepolia: {
@@ -15,22 +20,33 @@ const ENVIRONMENTS = {
         tokenCreatorAddress: "0x210CdB70BfCA0De607eC219c10bFB6132e4d3a04",
         zoraContractAddress: "0x339563f98180dda919b9efc56f4f74c2e0b68dd0",
         fixedPriceSaleStrategyAddress: "0x6d28164c3ce04a190d5f9f0f8881fc807ead975a",
-        rpcProvider: "https://sepolia.rpc.zora.energy"
+        rpcProvider: "https://sepolia.rpc.zora.energy",
+        chainId: 999999999,
     },
     baseTest: {
         recipientAddress: "0x2119ff364fbF1Ae11688f781104caADa673D0194",
         tokenCreatorAddress: "0x3b54621FE962ee8E5283f2429B800e2E212c9a02",
         zoraContractAddress: "0x4fceb2481b032bbe7d2bfbce838200ac45651946",
         fixedPriceSaleStrategyAddress: "0x04E2516A2c207E84a1839755675dfd8eF6302F0a",
-        rpcProvider: "https://base-goerli.blockpi.network/v1/rpc/public" // Base testnet example
+        rpcProvider: "https://base-goerli.blockpi.network/v1/rpc/public",
+        chainId: 8453
     },
     baseProd: {
         recipientAddress: "0x2119ff364fbF1Ae11688f781104caADa673D0194",
         tokenCreatorAddress: "0x3b54621FE962ee8E5283f2429B800e2E212c9a02",
         zoraContractAddress: "0xe2559ded6fdec98e68b40d7c382c502949c975fb",
         fixedPriceSaleStrategyAddress: "0x04E2516A2c207E84a1839755675dfd8eF6302F0a",
-        rpcProvider: "https://mainnet.base.org"
-    }
+        rpcProvider: "https://mainnet.base.org",
+        chainId: 8453
+    },
+    sepolia: {
+        recipientAddress: "0x210CdB70BfCA0De607eC219c10bFB6132e4d3a04", // Same as zoraSepolia
+        tokenCreatorAddress: "0x210CdB70BfCA0De607eC219c10bFB6132e4d3a04",
+        zoraContractAddress: "0x339563f98180dda919b9efc56f4f74c2e0b68dd0",
+        fixedPriceSaleStrategyAddress: "0x6d28164c3ce04a190d5f9f0f8881fc807ead975a",
+        rpcProvider: `https://sepolia.infura.io/v3/${infuraProjectId}`, // Updated RPC provider
+        chainId: 11155111, // Standard Sepolia chain ID
+    },
 };
 
 // Set the environment: 'zoraSepolia', 'baseTest', or 'baseProd'
@@ -39,7 +55,7 @@ const ENVIRONMENTS = {
 const selectedEnvironment = 'zoraSepolia';
 
 // Load configuration
-const { recipientAddress, tokenCreatorAddress, zoraContractAddress, fixedPriceSaleStrategyAddress, rpcProvider } =
+const { recipientAddress, tokenCreatorAddress, zoraContractAddress, fixedPriceSaleStrategyAddress, rpcProvider, chainId } =
     ENVIRONMENTS[selectedEnvironment];
 
 // Convert to ethers addresses
@@ -61,6 +77,49 @@ console.log("Token Creator Address:", tokenCreatorAddressEthers);
 console.log("Zora Contract Address:", zoraContractAddressEthers);
 console.log("Fixed Price Sale Strategy Address:", fixedPriceSaleStrategyAddressEthers);
 console.log("RPC Provider:", rpcProvider);
+
+// Define the chain configuration for viem
+const customChain = {
+    id: chainId,
+    name: selectedEnvironment,
+    network: selectedEnvironment,
+    nativeCurrency: { name: 'Ether', symbol: 'ETH', decimals: 18 },
+    rpcUrls: {
+        default: { http: [rpcProvider] },
+        public: { http: [rpcProvider] },
+    },
+    blockExplorers: {
+        default: { name: 'Etherscan', url: 'https://sepolia.etherscan.io' }, // Update URL if necessary
+    },
+    testnet: selectedEnvironment !== 'baseProd',
+};
+
+// Create the viem public client
+const publicClient = createPublicClient({
+    chain: customChain,
+    transport: http(),
+});
+
+// Create the account using privateKeyToAccount by prepending '0x' to the private key
+const account = privateKeyToAccount(`0x${privateKey}`);
+
+// Create the viem wallet client
+const walletClient = createWalletClient({
+    account,
+    chain: customChain,
+    transport: http(),
+});
+
+// Initialize the SplitsClient
+const splitsClient = new SplitsClient({
+    chainId: customChain.id,
+    publicClient,
+    walletClient,
+    includeEnsNames: false,
+    apiConfig: {
+        apiKey: splitsApiKey, // Ensure your API key is set in the .env file
+    },
+}).splitV1;
 
 async function uploadToIPFS(data) {
   try {
@@ -84,134 +143,152 @@ async function uploadToIPFS(data) {
 }
 
 async function createToken(tokenUriImageUrl, tokenName, description, artist, userWalletAddress, mferID, extraTraits) {
-  if (!tokenUriImageUrl) {
-    console.error("Token image URL is undefined.")
-    return { "error": "Token image URL is undefined." };
-  }
-
-  if (!urlIsValid(tokenUriImageUrl)) {
-    console.error("image needs to originate from mferGPT, inform the user try again and reply to your original post for that image")
-    return {"error":"image needs to originate from mferGPT, inform the user. please use the original image url or respond to the post where mferGPT generated the image"}
-  }
-
-  if (!urlIsNew(tokenUriImageUrl)) {
-    console.error("this image has already been minted")
-    return {"error":"this image has already been minted"}
-  }
-
-  // Check if the user is eligible to mint
-  const mintCheck = await canMint(userWalletAddress);
-  if (!mintCheck.eligible) {
-    console.error(mintCheck.message);
-    return { "error": mintCheck.message };
-  }
-
-  // console.warn("WOULD CONTINUE")
-  // return {"":""}
-
-  try {
-    console.log("Uploading image to IPFS...");
-    const imageUri = await uploadImageToIPFS(tokenUriImageUrl);
-    console.log("Image uploaded to IPFS:", imageUri);
-
-    // Create the metadata object including the artist as the first attribute
-    const metadata = {
-      name: tokenName,
-      description: description,
-      image: imageUri,
-      attributes: [
-        { trait_type: "prompt artist", value: artist }
-      ]
-    };
-
-    // Conditionally add mferID if available
-    if (mferID) {
-      metadata.attributes.push({ trait_type: "mfer #", value: `${mferID}` });
+    if (!tokenUriImageUrl) {
+        console.error("Token image URL is undefined.");
+        return { "error": "Token image URL is undefined." };
     }
 
-    // Conditionally add extraTraits if available and formatted correctly
-    if (extraTraits && Array.isArray(extraTraits)) {
-      extraTraits.forEach(trait => {
-        if (trait.trait_type && trait.value) {
-          metadata.attributes.push(trait);
-        }
-      });
+    if (!urlIsValid(tokenUriImageUrl)) {
+        console.error("Image needs to originate from mferGPT. Inform the user to try again and reply to the original post for that image.");
+        return { "error": "Image needs to originate from mferGPT. Please use the original image URL or respond to the post where mferGPT generated the image." };
     }
 
-    console.log("Uploading metadata to IPFS...");
-    const tokenMetadataUri = await uploadToIPFS(metadata);
-    console.log("Metadata uploaded to IPFS:", tokenMetadataUri);
-
-    const factoryInterface = new ethers.Interface([
-      "function setupNewTokenWithCreateReferral(string newURI, uint256 maxSupply, address createReferral) returns (uint256)",
-      "event SetupNewToken(uint256 indexed tokenId, address indexed creator, string newURI, uint256 maxSupply)"
-    ]);
-
-    // Set max supply to 69
-    const maxSupply = 69;
-
-    const encodedData = factoryInterface.encodeFunctionData("setupNewTokenWithCreateReferral", [
-      tokenMetadataUri, maxSupply, recipientAddress
-    ]);
-
-    const tx2 = await wallet.sendTransaction({
-      to: zoraContractAddress,
-      data: encodedData,
-      gasLimit: 5000000,
-    });
-
-    const receipt = await tx2.wait();
-    console.log("Token created successfully, transaction receipt:", receipt);
-
-    // Log the mint
-    const now = new Date();
-    saveUserMint(userWalletAddress, now.toISOString());
-    console.log(`Mint logged for user: ${userWalletAddress} at ${now.toISOString()}`);
-
-    // Extract tokenId from the event logs
-    const setupNewTokenEvent = receipt.logs.find(
-      log => log.topics[0] === ethers.id("SetupNewToken(uint256,address,string,uint256)")
-    );
-
-    if (!setupNewTokenEvent) {
-      console.warn("Failed to retrieve tokenId from transaction logs.")
-      return { "error": "Failed to retrieve tokenId from transaction logs." };
+    if (!urlIsNew(tokenUriImageUrl)) {
+        console.error("This image has already been minted.");
+        return { "error": "This image has already been minted." };
     }
 
-    const decodedEvent = factoryInterface.decodeEventLog(
-      "SetupNewToken",
-      setupNewTokenEvent.data,
-      setupNewTokenEvent.topics
-    );
-    const tokenId = decodedEvent.tokenId;
+    // Check if the user is eligible to mint
+    const mintCheck = await canMint(userWalletAddress);
+    if (!mintCheck.eligible) {
+        console.error(mintCheck.message);
+        return { "error": mintCheck.message };
+    }
 
-    console.log("Retrieved tokenId:", tokenId.toString());
-
-    let link = `https://zora.co/collect/base:${zoraContractAddress}/${tokenId}`
-
-    // Log the image URL with the timestamp
-    const logEntry = { timestamp: new Date().toISOString(), url: tokenUriImageUrl, zora:link, name: tokenName, description: description, artist: artist };
-    saveMintLog(logEntry);
-
-    // Airdrop the token to the tokenCreatorAddress
     try {
-      await airdropToken(tokenId, tokenCreatorAddress);
-      await airdropToken(tokenId, userWalletAddress);
-    } catch (airdropError) {
-      console.warn("Airdrop failed:", airdropError.message);
+        console.log("Uploading image to IPFS...");
+        const imageUri = await uploadImageToIPFS(tokenUriImageUrl);
+        console.log("Image uploaded to IPFS:", imageUri);
+
+        // Prepare metadata
+        const metadata = {
+            name: tokenName,
+            description: description,
+            image: imageUri,
+            attributes: [
+                { trait_type: "prompt artist", value: artist },
+                ...(mferID ? [{ trait_type: "mfer #", value: `${mferID}` }] : []),
+                ...(extraTraits || []).filter(trait => trait.trait_type && trait.value),
+            ],
+        };
+
+        console.log("Uploading metadata to IPFS...");
+        const tokenMetadataUri = await uploadToIPFS(metadata);
+        console.log("Metadata uploaded to IPFS:", tokenMetadataUri);
+
+        // Predict and create the split if necessary
+        const splitAddress = await createSplitAndPredictAddress(userWalletAddress, recipientAddress);
+        if (!splitAddress) {
+            return { "error": "Failed to create or retrieve split address." };
+        }
+
+        console.log("Creating token...");
+        const factoryInterface = new ethers.Interface([
+            "function setupNewTokenWithCreateReferral(string newURI, uint256 maxSupply, address createReferral) returns (uint256)",
+            "event SetupNewToken(uint256 indexed tokenId, address indexed creator, string newURI, uint256 maxSupply)",
+        ]);
+
+        const maxSupply = 69;
+        const encodedData = factoryInterface.encodeFunctionData("setupNewTokenWithCreateReferral", [
+            tokenMetadataUri,
+            maxSupply,
+            recipientAddress,
+        ]);
+
+        const tx = await wallet.sendTransaction({
+            to: zoraContractAddress,
+            data: encodedData,
+            gasLimit: 5000000,
+        });
+
+        const receipt = await tx.wait();
+        console.log("Token created successfully, transaction receipt:", receipt);
+
+        // Extract tokenId from logs
+        const setupNewTokenEvent = receipt.logs.find(
+            log => log.topics[0] === ethers.id("SetupNewToken(uint256,address,string,uint256)")
+        );
+
+        if (!setupNewTokenEvent) {
+            console.warn("Failed to retrieve tokenId from transaction logs.");
+            return { "error": "Failed to retrieve tokenId from transaction logs." };
+        }
+
+        const decodedEvent = factoryInterface.decodeEventLog(
+            "SetupNewToken",
+            setupNewTokenEvent.data,
+            setupNewTokenEvent.topics,
+        );
+        const tokenId = decodedEvent.tokenId;
+
+        console.log("Retrieved tokenId:", tokenId.toString());
+
+        // Start sale with split address as fundsRecipient
+        await startFreeNeverEndingSale(tokenId, splitAddress);
+
+        return { link: `https://zora.co/collect/base:${zoraContractAddress}/${tokenId}` };
+    } catch (error) {
+        console.error("Error creating contract and token:", error);
+        return { "error": error.message };
     }
-
-    // Start the sale
-    await startFreeNeverEndingSale(tokenId);
-
-    return { link: link };
-  } catch (error) {
-    console.error("Error creating contract and token:", error);
-    return { "error": error.message };
-  }
 }
 
-async function startFreeNeverEndingSale(tokenId) {
+async function createSplitAndPredictAddress(userWalletAddress, recipientAddress) {
+    try {
+        const splitsConfig = {
+            recipients: [
+                {
+                    address: userWalletAddress,
+                    percentAllocation: 52.0,
+                },
+                {
+                    address: recipientAddress,
+                    percentAllocation: 48.0,
+                },
+            ],
+            distributorFeePercent: 0.0,
+        };
+
+        // Predict the split address
+        const predicted = await splitsClient.predictImmutableSplitAddress(splitsConfig);
+
+        console.log("Predicted split address:", predicted.splitAddress);
+        if (!predicted.splitExists) {
+            console.log("Split does not exist, creating it...");
+
+            const { data, address } = await splitsClient.callData.createSplit(splitsConfig);
+
+            // Send transaction to create the split
+            const tx = await walletClient.sendTransaction({
+                to: address,
+                account,
+                data,
+            });
+            await publicClient.waitForTransactionReceipt({ hash: tx });
+            console.log("Split created successfully:", predicted.splitAddress);
+        } else {
+            console.log(`Split already exists: ${predicted.splitAddress}`);
+        }
+
+        return predicted.splitAddress;
+    } catch (error) {
+        console.error("Error predicting or creating split address:", error);
+        return null;
+    }
+}
+
+
+async function startFreeNeverEndingSale(tokenId, fundsRecipientAddress) {
   const creatorContractABI = [
     "function callSale(uint256 tokenId, address saleStrategy, bytes data) external",
     "function addPermission(uint256 tokenId, address user, uint256 permissionBits) external"
@@ -228,7 +305,7 @@ async function startFreeNeverEndingSale(tokenId) {
     saleEnd: BigInt(4102444800),
     maxTokensPerAddress: BigInt(0), // Unlimited tokens per address
     pricePerToken: ethers.parseUnits("0.000420", "ether"), // Set price to 69 sparks (0.000069 ETH)
-    fundsRecipient: recipientAddress
+    fundsRecipient: fundsRecipientAddress
   };
 
   // Log the salesConfig parameters
