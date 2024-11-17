@@ -147,8 +147,11 @@ async function createToken(tokenUriImageUrl, tokenName, description, artist, use
       "event SetupNewToken(uint256 indexed tokenId, address indexed creator, string newURI, uint256 maxSupply)"
     ]);
 
+    // Set max supply to 69
+    const maxSupply = 69;
+
     const encodedData = factoryInterface.encodeFunctionData("setupNewTokenWithCreateReferral", [
-      tokenMetadataUri, ethers.MaxUint256, recipientAddress
+      tokenMetadataUri, maxSupply, recipientAddress
     ]);
 
     const tx2 = await wallet.sendTransaction({
@@ -191,6 +194,7 @@ async function createToken(tokenUriImageUrl, tokenName, description, artist, use
     // Airdrop the token to the tokenCreatorAddress
     try {
       await airdropToken(tokenId, tokenCreatorAddress);
+      await airdropToken(tokenId, userWalletAddress);
     } catch (airdropError) {
       console.warn("Airdrop failed:", airdropError.message);
     }
@@ -400,6 +404,23 @@ async function checkGMFRBalance(walletAddress) {
   return balance
 }
 
+async function checkMIGVIDBalance(walletAddress) {
+  // Initialize the token contract with the token ID 'GMFR'
+  const { nft } = initializeContracts('MIGVID');
+
+  // Get the balance of 'GMFR' for the specified wallet address
+  const balance = await getTokenBalance(nft, walletAddress);
+
+  // Make sure to resolve the balance before creating the string
+  const logStatement = `Theeeee balance of MIGVID for wallet ${walletAddress} is: ${JSON.stringify(balance)} MIGVID`;
+
+  // Now, JSON.stringify the log statement
+  const jsonString = JSON.stringify(logStatement);
+  console.log(jsonString);
+
+  return balance
+}
+
 async function canMint(userWalletAddress) {
   const now = new Date();
   const lastMintDate = lastMintForUser(userWalletAddress);
@@ -411,6 +432,14 @@ async function canMint(userWalletAddress) {
   if (gmferBalance >= 2500000) {
     return { eligible: true, message: "User holds sufficient GMFR to mint." };
   }
+
+   // Check GMFR balance
+  // const migvidBalance = await checkMIGVIDBalance(userWalletAddress);
+
+  // // If the user holds at least 2.5 million GMFR, they can mint without restrictions
+  // if (migvidBalance >= 1) {
+  //   return { eligible: true, message: "User holds sufficient MIGVID to mint." };
+  // }
 
   // Check if the user minted in the last week
   if (lastMintDate) {
