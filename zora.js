@@ -263,12 +263,12 @@ async function createSplitAndPredictAddress(userWalletAddress, recipientAddress)
     try {
         let userAllocation = 25.0; // Base allocation is 25%
 
-        // Check for MIGVID and GMFR balances
-        const migvidBalance = await checkMIGVIDBalance(userWalletAddress);
-        if (migvidBalance >= 1) {
-            console.log("User owns MIGVID, adding 25% to allocation.");
-            userAllocation += 25.0;
-        }
+        // // Check for MIGVID and GMFR balances
+        // const migvidBalance = await checkMIGVIDBalance(userWalletAddress);
+        // if (migvidBalance >= 1) {
+        //     console.log("User owns MIGVID, adding 25% to allocation.");
+        //     userAllocation += 25.0;
+        // }
 
         const gmferBalance = await checkGMFRBalance(userWalletAddress);
         if (gmferBalance >= 2500000) {
@@ -546,12 +546,12 @@ async function canMint(userWalletAddress) {
   }
 
    // Check GMFR balance
-  const migvidBalance = await checkMIGVIDBalance(userWalletAddress);
+  // const migvidBalance = await checkMIGVIDBalance(userWalletAddress);
 
-  // If the user holds at least 2.5 million GMFR, they can mint without restrictions
-  if (migvidBalance >= 1) {
-    return { eligible: true, message: "User holds sufficient MIGVID to mint." };
-  }
+  // // If the user holds at least 2.5 million GMFR, they can mint without restrictions
+  // if (migvidBalance >= 1) {
+  //   return { eligible: true, message: "User holds sufficient MIGVID to mint." };
+  // }
 
   // Check if the user minted in the last week
   if (lastMintDate) {
