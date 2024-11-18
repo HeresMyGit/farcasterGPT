@@ -5,6 +5,8 @@ const { generateImage } = require('./image.js'); // Import image generation func
 const { getMferDescription } = require('./mfer.js');
 const { NeynarAPIClient } = require('@neynar/nodejs-sdk');
 const { generateAndCastImage } = require('./castDailySummary.js')
+const { postNFTToTwitter } = require('./zoraTweeter.js');
+const { loadMintLog } = require('./threadUtils');
 const cron = require('node-cron'); // Import node-cron for scheduling
 const fs = require('fs');
 const path = require('path');
@@ -337,6 +339,98 @@ async function postMostPopularMferTweet() {
   }
 }
 
+// Function to process recent mints and post to Twitter
+async function processRecentMints() {
+  try {
+    console.log('Loading mint log...');
+    const mintLog = loadMintLog(); // Assuming loadMintLog returns an array of NFT JSONs
+
+    const now = new Date();
+    const twelveHoursAgo = new Date(now.getTime() - 12 * 60 * 60 * 1000);
+
+    // Find mints in the last 12 hours
+    const recentMints = mintLog.filter(nft => new Date(nft.timestamp) >= twelveHoursAgo);
+
+    if (recentMints.length === 0) {
+      console.log('No new mints in the last 12 hours. Doing nothing.');
+      return;
+    }
+
+    if (recentMints.length === 1) {
+      console.log('Found 1 new mint. Posting to Twitter...');
+      await postNFTToTwitter(recentMints[0]); // Assuming this function handles GPT-based tweet generation
+      return;
+    }
+
+    // More than 1 mint
+    // Sort by timestamp descending to get the latest mints first
+    recentMints.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+
+    // Pick up to the 4 latest mints
+    const mintsToPost = recentMints.slice(0, 4);
+
+    // Generate a response with a link to the full collection using GPT
+    const collectionLink = 'https://zora.co/collect/base:0xe2559ded6fdec98e68b40d7c382c502949c975fb';
+    const nftLinks = mintsToPost.map(nft => nft.zora).join('\n');
+
+    // Prepare the prompt for GPT to generate the tweet content
+    const prompt = `We've minted ${mintsToPost.length} new NFTs in the last 12 hours! Check out the full collection here: ${collectionLink}\n\nCompose a concise and engaging tweet announcing these new mints. Keep it under 280 characters.  Only include the collection URL, not each individual URL.`;
+
+    console.log('Generating tweet content via GPT...');
+    
+    // Create a new thread for generating the tweet content
+    const threadId = await createNewThread("Generate Mints Announcement Tweet");
+
+    // Add the prompt to the thread
+    await createMessage(threadId, prompt);
+
+    // Run the thread to get the assistant's response
+    const tweetContent = await runThread(threadId);
+
+    if (!tweetContent) {
+      console.error('Failed to generate GPT content for multiple mints tweet. Aborting.');
+      return;
+    }
+
+    console.log('Generated tweet content:', tweetContent);
+
+    // Download up to 4 images concurrently
+    const imageDownloadPromises = mintsToPost.map((nft, index) => {
+      const imageUrl = nft.url;
+      const localImagePath = path.join(__dirname, `mint-image-${index + 1}.png`);
+      return downloadImage(imageUrl, localImagePath)
+        .then(() => localImagePath)
+        .catch(err => {
+          console.error(`Error downloading image ${imageUrl}:`, err);
+          return null; // Return null for failed downloads
+        });
+    });
+
+    // Await all image download promises
+    const downloadedImagePaths = await Promise.all(imageDownloadPromises);
+    // Filter out any failed downloads
+    const validImagePaths = downloadedImagePaths.filter(imagePath => imagePath !== null);
+
+    if (validImagePaths.length === 0) {
+      console.error('Failed to download any images. Skipping tweet.');
+      return;
+    }
+
+    // Post the tweet with images
+    console.log('Posting multiple mints to Twitter with images: ', validImagePaths);
+    await sendTweet(tweetContent, validImagePaths);
+
+    // Delete the downloaded images after successful tweet
+    for (const imagePath of validImagePaths) {
+      await deleteLocalImage(imagePath);
+    }
+
+    console.log('Multiple mints posted successfully to Twitter.');
+  } catch (error) {
+    console.error('Error processing recent mints:', error.message);
+  }
+}
+
 const lengths = ["1-25 characters", "1-50 characters", "25-75 characters", "50-100 characters", "75-150 characters", "150-240 characters"];
 const types = ["a bullpost", "funny", "a story about yourself", "absurd", "heartfelt", "hype", "a strongwilled positive statement", "pure shitpost", "deep, insightful, and thought provoking"];
 const topics = ["mfers", "mfercoin", "mfers", "$mfer", "mfers nfts", "ai", "onchain ai", "twitter/x", "farcaster", "blockchain", "mfercoin", "mfers", "$mfer backed assets from mfer.club", "mfer.com", "whatever you want", "anything", "crypto", "gmfer ($gmfr) backed by $mfer", "sartoshicoin ($sartoshi) backed by $mfer"];
@@ -374,10 +468,16 @@ cron.schedule('0 17 * * *', async () => {
   await postMostPopularMferTweet();
 });
 
+// Schedule the processRecentMints function to run at 6:30am and 6:30pm PT
+cron.schedule('30 6,18 * * *', async () => {
+  console.log('Running processRecentMints...');
+  await processRecentMints();
+});
+
 // (async () => {
 //   await sendDailyGMTweet();
 // })();
 
 // (async () => {
-//   await await postMostPopularMferTweet();
+//   await processRecentMints();
 // })();

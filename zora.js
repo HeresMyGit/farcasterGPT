@@ -3,6 +3,7 @@ const axios = require('axios');
 const FormData = require('form-data');
 const { loadImageLog, loadMintLog, saveMintLog, loadUserMints, saveUserMint, lastMintForUser  } = require('./threadUtils');
 const { getTokenBalance, initializeContracts } = require('./mintClub.js'); 
+const { postNFTToFarcaster, postNFTToTwitter } = require('./zoraTweeter.js');
 const { SplitsClient } = require('@0xsplits/splits-sdk');
 const { createPublicClient, createWalletClient, http } = require('viem');
 const { privateKeyToAccount } = require('viem/accounts');
@@ -52,7 +53,7 @@ const ENVIRONMENTS = {
 // Set the environment: 'zoraSepolia', 'baseTest', or 'baseProd'
 // const selectedEnvironment = 'baseProd';
 // const selectedEnvironment = 'baseTest';
-const selectedEnvironment = 'zoraSepolia';
+const selectedEnvironment = 'baseProd';
 
 // Load configuration
 const { recipientAddress, tokenCreatorAddress, zoraContractAddress, fixedPriceSaleStrategyAddress, rpcProvider, chainId } =
@@ -233,8 +234,23 @@ async function createToken(tokenUriImageUrl, tokenName, description, artist, use
 
         console.log("Retrieved tokenId:", tokenId.toString());
 
+        let link = `https://zora.co/collect/base:${zoraContractAddress}/${tokenId}`
+
+        // Log the image URL with the timestamp
+        const logEntry = { timestamp: new Date().toISOString(), url: tokenUriImageUrl, zora:link, name: tokenName, description: description, artist: artist };
+        saveMintLog(logEntry);
+
+        try {
+          await airdropToken(tokenId, tokenCreatorAddress);
+          await airdropToken(tokenId, userWalletAddress);
+        } catch (airdropError) {
+          console.warn("Airdrop failed:", airdropError.message);
+        }
+
         // Start sale with split address as fundsRecipient
         await startFreeNeverEndingSale(tokenId, splitAddress);
+
+        await postNFTToFarcaster(logEntry)
 
         return { link: `https://zora.co/collect/base:${zoraContractAddress}/${tokenId}` };
     } catch (error) {
@@ -245,15 +261,34 @@ async function createToken(tokenUriImageUrl, tokenName, description, artist, use
 
 async function createSplitAndPredictAddress(userWalletAddress, recipientAddress) {
     try {
+        let userAllocation = 25.0; // Base allocation is 25%
+
+        // Check for MIGVID and GMFR balances
+        const migvidBalance = await checkMIGVIDBalance(userWalletAddress);
+        if (migvidBalance >= 1) {
+            console.log("User owns MIGVID, adding 25% to allocation.");
+            userAllocation += 25.0;
+        }
+
+        const gmferBalance = await checkGMFRBalance(userWalletAddress);
+        if (gmferBalance >= 2500000) {
+            console.log("User owns 2.5M GMFR, adding 25% to allocation.");
+            userAllocation += 25.0;
+        }
+
+        // Remaining allocation goes to recipientAddress
+        const recipientAllocation = 100.0 - userAllocation;
+
+        // Define splits configuration
         const splitsConfig = {
             recipients: [
                 {
                     address: userWalletAddress,
-                    percentAllocation: 52.0,
+                    percentAllocation: userAllocation,
                 },
                 {
                     address: recipientAddress,
-                    percentAllocation: 48.0,
+                    percentAllocation: recipientAllocation,
                 },
             ],
             distributorFeePercent: 0.0,
@@ -511,12 +546,12 @@ async function canMint(userWalletAddress) {
   }
 
    // Check GMFR balance
-  // const migvidBalance = await checkMIGVIDBalance(userWalletAddress);
+  const migvidBalance = await checkMIGVIDBalance(userWalletAddress);
 
-  // // If the user holds at least 2.5 million GMFR, they can mint without restrictions
-  // if (migvidBalance >= 1) {
-  //   return { eligible: true, message: "User holds sufficient MIGVID to mint." };
-  // }
+  // If the user holds at least 2.5 million GMFR, they can mint without restrictions
+  if (migvidBalance >= 1) {
+    return { eligible: true, message: "User holds sufficient MIGVID to mint." };
+  }
 
   // Check if the user minted in the last week
   if (lastMintDate) {

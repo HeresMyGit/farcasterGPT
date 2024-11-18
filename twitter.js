@@ -111,6 +111,7 @@ async function uploadMedia(imagePath) {
 async function sendTweet(text, imagePaths = [], quoteTweetId = null) {
   try {
     let media_ids = [];
+    console.log("images: ", imagePaths)
 
     // Upload each image and collect the media IDs
     for (const imagePath of imagePaths) {
