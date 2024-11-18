@@ -215,6 +215,11 @@ async function createToken(tokenUriImageUrl, tokenName, description, artist, use
         const receipt = await tx.wait();
         console.log("Token created successfully, transaction receipt:", receipt);
 
+        // Log the mint
+        const now = new Date();
+        saveUserMint(userWalletAddress, now.toISOString());
+        console.log(`Mint logged for user: ${userWalletAddress} at ${now.toISOString()}`);
+
         // Extract tokenId from logs
         const setupNewTokenEvent = receipt.logs.find(
             log => log.topics[0] === ethers.id("SetupNewToken(uint256,address,string,uint256)")
