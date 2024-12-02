@@ -90,6 +90,7 @@ async function fetchMostPopularMferTweet() {
 async function fetchMostLikedMentions(userId, count = 10) {
   console.log(`Fetching the last ${count} tweets mentioning user ID: ${userId}...`);
   try {
+    const now = new Date();
     const baseURL = `https://api.twitter.com/2/users/${userId}/mentions`;
     const sixHoursAgo = new Date(now.getTime() - 6 * 60 * 60 * 1000).toISOString(); 
     const queryParams = `max_results=${count}&tweet.fields=public_metrics,referenced_tweets,attachments&media.fields=url&expansions=attachments.media_keys&start_time=${sixHoursAgo}`;
