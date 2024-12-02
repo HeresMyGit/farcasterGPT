@@ -1,12 +1,12 @@
 require('dotenv').config(); // Load environment variables
 const { OpenAI } = require('openai'); // Import OpenAI SDK
-const { sendTweet, fetchMostPopularMferTweet } = require('./twitter.js'); // Import the sendTweet function
+const { sendTweet, fetchMostPopularMferTweet, fetchMostLikedMentions } = require('./twitter.js'); // Import the sendTweet function
 const { generateImage } = require('./image.js'); // Import image generation function
 const { getMferDescription } = require('./mfer.js');
 const { NeynarAPIClient } = require('@neynar/nodejs-sdk');
 const { generateAndCastImage } = require('./castDailySummary.js')
 const { postNFTToTwitter } = require('./zoraTweeter.js');
-const { loadMintLog } = require('./threadUtils');
+const { loadMintLog, hasRepliedToTweet, saveRepliedTweet } = require('./threadUtils');
 const cron = require('node-cron'); // Import node-cron for scheduling
 const fs = require('fs');
 const path = require('path');
@@ -431,6 +431,62 @@ async function processRecentMints() {
   }
 }
 
+async function fetchAndReplyToMostLikedMention(userId, count = 10) {
+  console.log(`Fetching the last ${count} tweets mentioning user ID: ${userId} and replying to the most liked one...`);
+  try {
+    const mentions = await fetchMostLikedMentions(userId, count);
+
+    if (!mentions || mentions.length === 0) {
+      console.log('No mentions found to reply to.');
+      return;
+    }
+
+    // Find the most liked mention
+    const mostLikedMention = mentions.reduce((prev, current) =>
+      (current.public_metrics.like_count > prev.public_metrics.like_count ? current : prev)
+    );
+
+    if (!mostLikedMention) {
+      console.log('No most-liked mention found.');
+      return;
+    }
+
+    const { id: tweetId, text: mentionText } = mostLikedMention;
+
+    console.log(`Most liked mention: "${mentionText}" (Tweet ID: ${tweetId})`);
+
+    // Check if the bot has already replied to this tweet
+    const alreadyReplied = await hasRepliedToTweet(tweetId);
+    if (alreadyReplied) {
+      console.log(`Already replied to Tweet ID: ${tweetId}. Skipping reply.`);
+      return;
+    }
+
+    // Generate a response to the most liked mention using OpenAI
+    console.log(`Generating response for mention: "${mentionText}"`);
+    const threadId = await createNewThread("Reply to Most Liked Mention");
+    await createMessage(threadId, `reply to this tweet: "${mentionText}"`);
+    const assistantResponse = await runThread(threadId);
+
+    if (!assistantResponse) {
+      console.error('Failed to generate GPT response. Skipping reply.');
+      return;
+    }
+
+    console.log('Generated response:', assistantResponse);
+
+    // Reply to the tweet
+    console.log(`Replying to Tweet ID: ${tweetId} with: "${assistantResponse}"`);
+    await sendTweet(assistantResponse, [], null, tweetId);
+
+    saveRepliedTweet(tweetId);
+
+    console.log('Reply sent successfully!');
+  } catch (error) {
+    console.error('Error fetching mentions or replying:', error.response ? error.response.data : error.message);
+  }
+}
+
 const lengths = ["1-25 characters", "1-50 characters", "25-75 characters", "50-100 characters", "75-150 characters", "150-240 characters"];
 const types = ["a bullpost", "funny", "a story about yourself", "absurd", "heartfelt", "hype", "a strongwilled positive statement", "pure shitpost", "deep, insightful, and thought provoking"];
 const topics = ["mfers", "mfercoin", "mfers", "$mfer", "mfers nfts", "ai", "onchain ai", "twitter/x", "farcaster", "blockchain", "mfercoin", "mfers", "$mfer backed assets from mfer.club", "mfer.com", "whatever you want", "anything", "crypto", "gmfer ($gmfr) backed by $mfer", "sartoshicoin ($sartoshi) backed by $mfer"];
@@ -447,8 +503,8 @@ const topics = ["mfers", "mfercoin", "mfers", "$mfer", "mfers nfts", "ai", "onch
 // })();
 
 
-// Runs every 2 hours starting at midnight (Pacific Time)
-cron.schedule('0 0-23/2 * * *', async () => {
+// Runs every 4 hours starting at midnight (Pacific Time)
+cron.schedule('0 0-23/4 * * *', async () => {
   console.log('Running the scheduled tweetAssistantResponse...');
   const randomLength = lengths[Math.floor(Math.random() * lengths.length)];
   const prompt = `the next random tweet should be ${randomLength}.  remember always include $mfer. next`;
@@ -456,7 +512,7 @@ cron.schedule('0 0-23/2 * * *', async () => {
   await tweetAssistantResponse(prompt);
 });
 
-// // Runs every day at 7am Pacific Time
+// Runs every day at 7am Pacific Time
 cron.schedule('30 7 * * *', async () => {
   console.log('Running the daily GM tweet...');
   await sendDailyGMTweet();
@@ -473,6 +529,12 @@ cron.schedule('30 6,18 * * *', async () => {
   console.log('Running processRecentMints...');
   await processRecentMints();
 });
+
+// Runs every 4 hours starting at midnight (Pacific Time)
+cron.schedule('0 2-23/4 * * *', async () => {
+  const USER_ID = '1724482668195110912'; // Replace with your actual user ID
+  await fetchAndReplyToMostLikedMention(USER_ID);
+})();
 
 // (async () => {
 //   await sendDailyGMTweet();

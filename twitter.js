@@ -48,7 +48,7 @@ async function fetchMostPopularMferTweet() {
   console.log('Fetching the most popular $mfer tweet from the last 6 hours...');
   try {
     const now = new Date();
-    const sixHoursAgo = new Date(now.getTime() - 6 * 60 * 60 * 1000).toISOString();
+    const sixHoursAgo = new Date(now.getTime() - 24 * 60 * 60 * 1000).toISOString(); //24
     const baseURL = 'https://api.twitter.com/2/tweets/search/recent';
     const queryParams = `query=mfercoin&tweet.fields=public_metrics,referenced_tweets,attachments&media.fields=url&expansions=attachments.media_keys&start_time=${sixHoursAgo}&max_results=10`;
     const searchURL = `${baseURL}?${queryParams}`;
@@ -87,6 +87,40 @@ async function fetchMostPopularMferTweet() {
   }
 }
 
+async function fetchMostLikedMentions(userId, count = 10) {
+  console.log(`Fetching the last ${count} tweets mentioning user ID: ${userId}...`);
+  try {
+    const baseURL = `https://api.twitter.com/2/users/${userId}/mentions`;
+    const sixHoursAgo = new Date(now.getTime() - 6 * 60 * 60 * 1000).toISOString(); 
+    const queryParams = `max_results=${count}&tweet.fields=public_metrics,referenced_tweets,attachments&media.fields=url&expansions=attachments.media_keys&start_time=${sixHoursAgo}`;
+    const url = `${baseURL}?${queryParams}`;
+
+    // Use Bearer Token for authorization
+    const response = await axios.get(url, {
+      headers: {
+        Authorization: `Bearer ${BEARER_TOKEN}`,
+        'Content-Type': 'application/json',
+        'User-Agent': 'PostmanRuntime/7.42.0',
+        'Accept': '*/*',
+      }
+    });
+
+    const mentions = response.data.data;
+
+    if (!mentions || mentions.length === 0) {
+      console.log('No mentions found.');
+      return null;
+    }
+
+    console.log('Fetched mentions:', JSON.stringify(mentions, null, 2));
+
+    return mentions;
+  } catch (error) {
+    console.error('Error fetching mentions:', error.response ? error.response.data : error.message);
+    return null;
+  }
+}
+
 // Function to upload media to Twitter
 async function uploadMedia(imagePath) {
   const url = 'https://upload.twitter.com/1.1/media/upload.json';
@@ -107,11 +141,10 @@ async function uploadMedia(imagePath) {
   return response.data.media_id_string;
 }
 
-// Main function to send a tweet with multiple images and optional quote-tweet
-async function sendTweet(text, imagePaths = [], quoteTweetId = null) {
+async function sendTweet(text, imagePaths = [], quoteTweetId = null, replyTweetId = null) {
   try {
     let media_ids = [];
-    console.log("images: ", imagePaths)
+    console.log("images: ", imagePaths);
 
     // Upload each image and collect the media IDs
     for (const imagePath of imagePaths) {
@@ -127,6 +160,7 @@ async function sendTweet(text, imagePaths = [], quoteTweetId = null) {
       text: text,
     };
 
+    // Include media if available
     if (media_ids.length > 0) {
       tweetData.media = { media_ids: media_ids };
     }
@@ -134,6 +168,11 @@ async function sendTweet(text, imagePaths = [], quoteTweetId = null) {
     // Add quote-tweet functionality
     if (quoteTweetId) {
       tweetData.quote_tweet_id = quoteTweetId;
+    }
+
+    // Add reply functionality
+    if (replyTweetId) {
+      tweetData.reply = { in_reply_to_tweet_id: replyTweetId };
     }
 
     const tweetURL = 'https://api.twitter.com/2/tweets';
@@ -158,4 +197,5 @@ async function sendTweet(text, imagePaths = [], quoteTweetId = null) {
 module.exports = {
   sendTweet,
   fetchMostPopularMferTweet,
+  fetchMostLikedMentions,
 };

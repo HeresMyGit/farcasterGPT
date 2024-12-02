@@ -9,6 +9,7 @@ const PERSONAL_PROMPTS_FILE = path.resolve(__dirname, '../farcasterGPT-Data/pers
 const IMAGE_LOG_FILE = path.resolve(__dirname, '../farcasterGPT-Data/imageLog.json');
 const MINT_LOG_FILE = path.resolve(__dirname, '../farcasterGPT-Data/mintLog.json');
 const USER_MINT_FILE = path.resolve(__dirname, '../farcasterGPT-Data/userMint.json');
+const REPLIED_TWEETS_FILE = path.resolve(__dirname, '../farcasterGPT-Data/repliedTweets.json');
 
 
 
@@ -163,6 +164,30 @@ function lastMintForUser(address) {
   return userMints[address] || null; // Return the date if it exists, otherwise null
 }
 
+// Load replied tweet IDs from file
+function loadRepliedTweets() {
+  if (fs.existsSync(REPLIED_TWEETS_FILE)) {
+    const data = fs.readFileSync(REPLIED_TWEETS_FILE, 'utf-8');
+    return JSON.parse(data);
+  }
+  return [];
+}
+
+// Save a replied tweet ID to the file
+function saveRepliedTweet(tweetId) {
+  const repliedTweets = loadRepliedTweets();
+  if (!repliedTweets.includes(tweetId)) {
+    repliedTweets.push(tweetId);
+    fs.writeFileSync(REPLIED_TWEETS_FILE, JSON.stringify(repliedTweets, null, 2));
+  }
+}
+
+// Check if a tweet ID has been replied to
+function hasRepliedToTweet(tweetId) {
+  const repliedTweets = loadRepliedTweets();
+  return repliedTweets.includes(tweetId);
+}
+
 
 module.exports = {
   loadThreadMappings,
@@ -182,4 +207,7 @@ module.exports = {
   loadUserMints,
   saveUserMint,
   lastMintForUser,
+  loadRepliedTweets,
+  saveRepliedTweet,
+  hasRepliedToTweet,
 };
