@@ -87,6 +87,41 @@ async function fetchMostPopularMferTweet() {
   }
 }
 
+async function fetchMostLikedMentions(userId, count = 10) {
+  console.log(`Fetching the last ${count} tweets mentioning user ID: ${userId}...`);
+  try {
+    const now = new Date();
+    const baseURL = `https://api.twitter.com/2/users/${userId}/mentions`;
+    const sixHoursAgo = new Date(now.getTime() - 6 * 60 * 60 * 1000).toISOString(); 
+    const queryParams = `max_results=${count}&tweet.fields=public_metrics,referenced_tweets,attachments&media.fields=url&expansions=attachments.media_keys&start_time=${sixHoursAgo}`;
+    const url = `${baseURL}?${queryParams}`;
+
+    // Use Bearer Token for authorization
+    const response = await axios.get(url, {
+      headers: {
+        Authorization: `Bearer ${BEARER_TOKEN}`,
+        'Content-Type': 'application/json',
+        'User-Agent': 'PostmanRuntime/7.42.0',
+        'Accept': '*/*',
+      }
+    });
+
+    const mentions = response.data.data;
+
+    if (!mentions || mentions.length === 0) {
+      console.log('No mentions found.');
+      return null;
+    }
+
+    console.log('Fetched mentions:', JSON.stringify(mentions, null, 2));
+
+    return mentions;
+  } catch (error) {
+    console.error('Error fetching mentions:', error.response ? error.response.data : error.message);
+    return null;
+  }
+}
+
 // Function to upload media to Twitter
 async function uploadMedia(imagePath) {
   const url = 'https://upload.twitter.com/1.1/media/upload.json';
