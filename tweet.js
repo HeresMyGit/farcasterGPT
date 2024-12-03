@@ -441,26 +441,28 @@ async function fetchAndReplyToMostLikedMention(userId, count = 10) {
       return;
     }
 
-    // Find the most liked mention
-    const mostLikedMention = mentions.reduce((prev, current) =>
-      (current.public_metrics.like_count > prev.public_metrics.like_count ? current : prev)
-    );
+    // Filter out mentions we've already replied to
+    const filteredMentions = [];
+    for (const mention of mentions) {
+      const alreadyReplied = await hasRepliedToTweet(mention.id);
+      if (!alreadyReplied) {
+        filteredMentions.push(mention);
+      }
+    }
 
-    if (!mostLikedMention) {
-      console.log('No most-liked mention found.');
+    if (filteredMentions.length === 0) {
+      console.log('All recent mentions have already been replied to. No new mentions to reply to.');
       return;
     }
+
+    // Find the most liked mention from the filtered list
+    const mostLikedMention = filteredMentions.reduce((prev, current) =>
+      (current.public_metrics.like_count > prev.public_metrics.like_count ? current : prev)
+    );
 
     const { id: tweetId, text: mentionText } = mostLikedMention;
 
     console.log(`Most liked mention: "${mentionText}" (Tweet ID: ${tweetId})`);
-
-    // Check if the bot has already replied to this tweet
-    const alreadyReplied = await hasRepliedToTweet(tweetId);
-    if (alreadyReplied) {
-      console.log(`Already replied to Tweet ID: ${tweetId}. Skipping reply.`);
-      return;
-    }
 
     // Generate a response to the most liked mention using OpenAI
     console.log(`Generating response for mention: "${mentionText}"`);
