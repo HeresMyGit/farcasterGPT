@@ -533,7 +533,7 @@ cron.schedule('30 6,18 * * *', async () => {
 });
 
 // Runs every 4 hours starting at midnight (Pacific Time)
-cron.schedule('0 2-23/4 * * *', async () => {
+cron.schedule('0 2,6,10,14,18,22 * * *', async () => {
   console.log('Running reply to recent mention')
   const USER_ID = '1724482668195110912'; // Replace with your actual user ID
   await fetchAndReplyToMostLikedMention(USER_ID);
@@ -544,5 +544,6 @@ cron.schedule('0 2-23/4 * * *', async () => {
 // })();
 
 // (async () => {
-//   await processRecentMints();
+//   const USER_ID = '1724482668195110912'; // Replace with your actual user ID
+//   await fetchAndReplyToMostLikedMention(USER_ID);
 // })();
