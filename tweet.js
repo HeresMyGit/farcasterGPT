@@ -508,7 +508,7 @@ async function fetchAndReplyToMostLikedMention(userId, count = 10) {
 
     // Reply to the tweet
     console.log(`Replying to Tweet ID: ${tweetId} with: "${assistantResponse}"`);
-    // await sendTweet(assistantResponse, [], null, tweetId);
+    await sendTweet(assistantResponse, [], null, tweetId);
 
     saveRepliedTweet(tweetId, threadId);
 
