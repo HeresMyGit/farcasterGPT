@@ -61,7 +61,7 @@ async function createMessage(threadId, userMessage) {
 async function handleThread(threadId) {
   console.log(`Running assistant on thread ${threadId}...`);
   try {
-    const run = await runThread(threadId);
+    const run = await runThread(threadId, process.env.TWITTER_ASST_MODEL);
 
     if (run.status === 'completed') {
       console.log(`Run completed successfully on thread: ${threadId}`);
@@ -498,8 +498,8 @@ async function fetchAndReplyToMostLikedMention(userId, count = 10) {
     console.log(`Generating response for mention: "${mentionText}"`);
     const tweetJson = JSON.stringify(mostLikedMention, null, 2);
     const promptText = (newThread ? "reply to this tweet:" : "reply to the next tweet in the thread:");
-    await createMessage(threadId, `${promptText} "${tweetJson}"`);
-    const assistantResponse = await runThread(threadId);
+    await createMessage(threadId, `draw mfer 8292 on twitter`);
+    const assistantResponse = await handleThread(threadId);
 
     if (!assistantResponse) {
       console.error('Failed to generate GPT response. Skipping reply.');
@@ -509,10 +509,28 @@ async function fetchAndReplyToMostLikedMention(userId, count = 10) {
     console.log('Generated response:', assistantResponse);
 
     const pngUrls = assistantResponse.match(/https?:\/\/\S+\.png\b/g) || [];
+    const localFilePaths = [];
+
+    if (pngUrls.length > 0) {
+      console.log(`Downloading ${pngUrls.length} PNG URLs...`);
+      const localImagesDir = path.join(__dirname, 'images');
+      if (!fs.existsSync(localImagesDir)) fs.mkdirSync(localImagesDir);
+
+      for (const [index, imageUrl] of pngUrls.entries()) {
+        const localImagePath = path.join(localImagesDir, `image-${index + 1}.png`);
+        await downloadImage(imageUrl, localImagePath);
+        localFilePaths.push(localImagePath);
+      }
+    }
 
     // Reply to the tweet
     console.log(`Replying to Tweet ID: ${tweetId} with: "${assistantResponse}"`);
-    await sendTweet(assistantResponse, pngUrls, null, tweetId);
+    await sendTweet(assistantResponse, localFilePaths, null, tweetId);
+
+    // Clean up downloaded images
+    for (const filePath of localFilePaths) {
+      await deleteLocalImage(filePath);
+    }
 
     saveRepliedTweet(tweetId, threadId);
 

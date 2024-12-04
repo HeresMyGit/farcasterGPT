@@ -107,7 +107,7 @@ async function createMessage(threadId, userMessage) {
 }
 
 // Utility function to run the Assistant on a thread with retry logic
-async function runThread(threadId) {
+async function runThread(threadId, assistantId) {
   const maxRetries = 10; // Set a maximum number of retries
   let attempt = 0;
 
@@ -142,7 +142,7 @@ async function runThread(threadId) {
 
       // If no runs in progress or requiring action, start a new run
       let run = await openai.beta.threads.runs.createAndPoll(threadId, {
-        assistant_id: process.env.ASST_MODEL,
+        assistant_id: assistantId,
         model: process.env.MODEL,
         // instructions: `use the following user profiles as context... \n${userContext}`, // Add instructions if needed
       });
@@ -317,7 +317,7 @@ async function handleWebhook(req, res) {
 
     // Step 3: Run the Assistant on the thread
     let botMessage = 'Sorry, I couldn’t complete the request at this time.';
-    const run = await runThread(threadId);
+    const run = await runThread(threadId, process.env.ASST_MODEL);
 
     if (!run || !run.status) {
       console.error('Run object is undefined or missing a status property.');
@@ -376,11 +376,11 @@ async function handleWebhook(req, res) {
         ...(isFirstChunk && imageUrl ? { embeds: [{ url: imageUrl }] } : {})
       };
 
-      // const reply = await neynarClient.publishCast(
-      //   process.env.SIGNER_UUID,
-      //   chunk,
-      //   currentReplyOptions
-      // );
+      const reply = await neynarClient.publishCast(
+        process.env.SIGNER_UUID,
+        chunk,
+        currentReplyOptions
+      );
 
       console.log('Reply sent:', chunk);
       
