@@ -107,7 +107,7 @@ async function createMessage(threadId, userMessage) {
 }
 
 // Utility function to run the Assistant on a thread with retry logic
-async function runThread(threadId, authorUsername) {
+async function runThread(threadId) {
   const maxRetries = 10; // Set a maximum number of retries
   let attempt = 0;
 
@@ -317,7 +317,7 @@ async function handleWebhook(req, res) {
 
     // Step 3: Run the Assistant on the thread
     let botMessage = 'Sorry, I couldn’t complete the request at this time.';
-    const run = await runThread(threadId, authorUsername);
+    const run = await runThread(threadId);
 
     if (!run || !run.status) {
       console.error('Run object is undefined or missing a status property.');

@@ -7,6 +7,8 @@ const { NeynarAPIClient } = require('@neynar/nodejs-sdk');
 const { generateAndCastImage } = require('./castDailySummary.js')
 const { postNFTToTwitter } = require('./zoraTweeter.js');
 const { loadMintLog, hasRepliedToTweet, saveRepliedTweet, threadIdForTweet } = require('./threadUtils');
+const { handleRequiresAction, imageUrlMap } = require('./actionHandler');
+const { runThread } = require('./assistant');
 const cron = require('node-cron'); // Import node-cron for scheduling
 const fs = require('fs');
 const path = require('path');
@@ -56,13 +58,10 @@ async function createMessage(threadId, userMessage) {
 }
 
 // Run the thread and get the assistant's response (mirrors structure from assistant.js)
-async function runThread(threadId) {
+async function handleThread(threadId) {
   console.log(`Running assistant on thread ${threadId}...`);
   try {
-    const run = await openai.beta.threads.runs.createAndPoll(threadId, {
-      assistant_id: TWITTER_ASST_MODEL,
-      model: MODEL,
-    });
+    const run = await runThread(threadId);
 
     if (run.status === 'completed') {
       console.log(`Run completed successfully on thread: ${threadId}`);
@@ -170,7 +169,7 @@ async function getRefinedImagePrompt(initialPrompt) {
     await createMessage(threadId, initialPrompt);
 
     console.log(`Running assistant on thread ${threadId} for refined prompt...`);
-    const refinedPrompt = await runThread(threadId);
+    const refinedPrompt = await handleThread(threadId);
 
     if (!refinedPrompt) {
       console.error('Failed to receive a refined image prompt. Using initial prompt.');
@@ -190,7 +189,7 @@ async function tweetAssistantResponse(prompt) {
   try {
     const threadId = "thread_wKxHCwpP7wje0KCwbU20cXek"; // Example thread ID
     await createMessage(threadId, prompt);
-    const assistantResponse = await runThread(threadId);
+    const assistantResponse = await handleThread(threadId);
 
     if (assistantResponse) {
       const mferId = Math.floor(Math.random() * 10021); // Pick a random mfer ID
@@ -226,7 +225,7 @@ async function sendDailyGMTweet() {
     const prompt = "Generate a short, upbeat 'gm' tweet for mfers that includes $gmfr and a positive vibe. always include a link to the gmfer coin: https://mint.club/token/base/GMFR";
     const threadId = await createNewThread("Daily GM Thread");
     await createMessage(threadId, prompt);
-    const tweetContent = await runThread(threadId);
+    const tweetContent = await handleThread(threadId);
 
     if (!tweetContent) {
       console.error('Failed to generate GPT content for the gm tweet. Aborting.');
@@ -289,7 +288,7 @@ async function postMostPopularMferTweet() {
       console.log('Generating GPT response...');
       const threadId = 'thread_wKxHCwpP7wje0KCwbU20cXek';
       await createMessage(threadId, `Create a witty or insightful comment about this tweet.  Only output the tweet, do not put it in quotes or anything else.  type as if you are typing directly into the tweet window. remember to always keep mfers and $mfer in a positive light.  respond to this tweet: "${text}"`);
-      const gptResponse = await runThread(threadId);
+      const gptResponse = await handleThread(threadId);
 
       if (!gptResponse) {
         console.error('GPT response generation failed. Skipping post.');
@@ -385,7 +384,7 @@ async function processRecentMints() {
     await createMessage(threadId, prompt);
 
     // Run the thread to get the assistant's response
-    const tweetContent = await runThread(threadId);
+    const tweetContent = await handleThread(threadId);
 
     if (!tweetContent) {
       console.error('Failed to generate GPT content for multiple mints tweet. Aborting.');
@@ -489,14 +488,17 @@ async function fetchAndReplyToMostLikedMention(userId, count = 10) {
 
     // Use existing threadId if available, or create a new one
     let threadId = existingThreadId;
+    let newThread = false;
     if (!threadId) {
+      newThread = true;
       console.log(`No existing threadId found. Creating a new thread for tweetId "${tweetId}".`);
       threadId = await createNewThread("Reply to Most Liked Mention");
     }
 
     console.log(`Generating response for mention: "${mentionText}"`);
     const tweetJson = JSON.stringify(mostLikedMention, null, 2);
-    await createMessage(threadId, `reply to this tweet: "${tweetJson}"`);
+    const promptText = (newThread ? "reply to this tweet:" : "reply to the next tweet in the thread:");
+    await createMessage(threadId, `${promptText} "${tweetJson}"`);
     const assistantResponse = await runThread(threadId);
 
     if (!assistantResponse) {
@@ -506,9 +508,11 @@ async function fetchAndReplyToMostLikedMention(userId, count = 10) {
 
     console.log('Generated response:', assistantResponse);
 
+    const pngUrls = assistantResponse.match(/https?:\/\/\S+\.png\b/g) || [];
+
     // Reply to the tweet
     console.log(`Replying to Tweet ID: ${tweetId} with: "${assistantResponse}"`);
-    await sendTweet(assistantResponse, [], null, tweetId);
+    await sendTweet(assistantResponse, pngUrls, null, tweetId);
 
     saveRepliedTweet(tweetId, threadId);
 
