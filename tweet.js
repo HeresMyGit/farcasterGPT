@@ -6,7 +6,7 @@ const { getMferDescription } = require('./mfer.js');
 const { NeynarAPIClient } = require('@neynar/nodejs-sdk');
 const { generateAndCastImage } = require('./castDailySummary.js')
 const { postNFTToTwitter } = require('./zoraTweeter.js');
-const { loadMintLog, hasRepliedToTweet, saveRepliedTweet } = require('./threadUtils');
+const { loadMintLog, hasRepliedToTweet, saveRepliedTweet, threadIdForTweet } = require('./threadUtils');
 const cron = require('node-cron'); // Import node-cron for scheduling
 const fs = require('fs');
 const path = require('path');
@@ -433,6 +433,7 @@ async function processRecentMints() {
 
 async function fetchAndReplyToMostLikedMention(userId, count = 10) {
   console.log(`Fetching the last ${count} tweets mentioning user ID: ${userId} and replying to the most liked one...`);
+
   try {
     const mentions = await fetchMostLikedMentions(userId, count);
 
@@ -455,19 +456,47 @@ async function fetchAndReplyToMostLikedMention(userId, count = 10) {
       return;
     }
 
-    // Find the most liked mention from the filtered list
+    // Check for existing thread IDs in references
+    for (const mention of filteredMentions) {
+      // Check the tweet ID itself for an existing threadId
+      const existingThreadIdForMention = await threadIdForTweet(mention.id);
+      if (existingThreadIdForMention) {
+        console.log(`Found existing threadId "${existingThreadIdForMention}" for tweetId "${mention.id}".`);
+        mention.threadId = existingThreadIdForMention; // Attach the existing threadId
+        continue; // Skip checking referenced tweets if found
+      }
+
+      // Check the referenced tweets for an existing threadId
+      const referencedTweetIds = mention.referenced_tweets?.map(ref => ref.id) || [];
+      for (const refId of referencedTweetIds) {
+        const existingThreadId = await threadIdForTweet(refId);
+        if (existingThreadId) {
+          console.log(`Found existing threadId "${existingThreadId}" for referenced tweetId "${refId}".`);
+          mention.threadId = existingThreadId; // Attach the existing threadId
+          break;
+        }
+      }
+    }
+
+    // Find the most liked mention
     const mostLikedMention = filteredMentions.reduce((prev, current) =>
       (current.public_metrics.like_count > prev.public_metrics.like_count ? current : prev)
     );
 
-    const { id: tweetId, text: mentionText } = mostLikedMention;
+    const { id: tweetId, text: mentionText, threadId: existingThreadId } = mostLikedMention;
 
     console.log(`Most liked mention: "${mentionText}" (Tweet ID: ${tweetId})`);
 
-    // Generate a response to the most liked mention using OpenAI
+    // Use existing threadId if available, or create a new one
+    let threadId = existingThreadId;
+    if (!threadId) {
+      console.log(`No existing threadId found. Creating a new thread for tweetId "${tweetId}".`);
+      threadId = await createNewThread("Reply to Most Liked Mention");
+    }
+
     console.log(`Generating response for mention: "${mentionText}"`);
-    const threadId = await createNewThread("Reply to Most Liked Mention");
-    await createMessage(threadId, `reply to this tweet: "${mentionText}"`);
+    const tweetJson = JSON.stringify(mostLikedMention, null, 2);
+    await createMessage(threadId, `reply to this tweet: "${tweetJson}"`);
     const assistantResponse = await runThread(threadId);
 
     if (!assistantResponse) {
@@ -479,9 +508,9 @@ async function fetchAndReplyToMostLikedMention(userId, count = 10) {
 
     // Reply to the tweet
     console.log(`Replying to Tweet ID: ${tweetId} with: "${assistantResponse}"`);
-    await sendTweet(assistantResponse, [], null, tweetId);
+    // await sendTweet(assistantResponse, [], null, tweetId);
 
-    saveRepliedTweet(tweetId);
+    saveRepliedTweet(tweetId, threadId);
 
     console.log('Reply sent successfully!');
   } catch (error) {
@@ -543,7 +572,7 @@ cron.schedule('0 2,6,10,14,18,22 * * *', async () => {
 //   await sendDailyGMTweet();
 // })();
 
-// (async () => {
-//   const USER_ID = '1724482668195110912'; // Replace with your actual user ID
-//   await fetchAndReplyToMostLikedMention(USER_ID);
-// })();
+(async () => {
+  const USER_ID = '1724482668195110912'; // Replace with your actual user ID
+  await fetchAndReplyToMostLikedMention(USER_ID);
+})();

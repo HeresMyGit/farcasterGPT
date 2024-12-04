@@ -164,7 +164,7 @@ function lastMintForUser(address) {
   return userMints[address] || null; // Return the date if it exists, otherwise null
 }
 
-// Load replied tweet IDs from file
+// Load replied tweets from the file
 function loadRepliedTweets() {
   if (fs.existsSync(REPLIED_TWEETS_FILE)) {
     const data = fs.readFileSync(REPLIED_TWEETS_FILE, 'utf-8');
@@ -173,11 +173,15 @@ function loadRepliedTweets() {
   return [];
 }
 
-// Save a replied tweet ID to the file
-function saveRepliedTweet(tweetId) {
+// Save a replied tweet with its threadId to the file
+function saveRepliedTweet(tweetId, threadId) {
   const repliedTweets = loadRepliedTweets();
-  if (!repliedTweets.includes(tweetId)) {
-    repliedTweets.push(tweetId);
+  
+  // Check if the tweetId is already in the list
+  const exists = repliedTweets.some(entry => entry.tweetId === tweetId);
+  
+  if (!exists) {
+    repliedTweets.push({ tweetId, threadId });
     fs.writeFileSync(REPLIED_TWEETS_FILE, JSON.stringify(repliedTweets, null, 2));
   }
 }
@@ -185,9 +189,15 @@ function saveRepliedTweet(tweetId) {
 // Check if a tweet ID has been replied to
 function hasRepliedToTweet(tweetId) {
   const repliedTweets = loadRepliedTweets();
-  return repliedTweets.includes(tweetId);
+  return repliedTweets.some(entry => entry.tweetId === tweetId);
 }
 
+// Get the threadId for a given tweetId
+function threadIdForTweet(tweetId) {
+  const repliedTweets = loadRepliedTweets();
+  const entry = repliedTweets.find(entry => entry.tweetId === tweetId);
+  return entry ? entry.threadId : null; // Return the threadId if found, otherwise null
+}
 
 module.exports = {
   loadThreadMappings,
@@ -210,4 +220,5 @@ module.exports = {
   loadRepliedTweets,
   saveRepliedTweet,
   hasRepliedToTweet,
+  threadIdForTweet,
 };
