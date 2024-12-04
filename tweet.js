@@ -557,7 +557,7 @@ const topics = ["mfers", "mfercoin", "mfers", "$mfer", "mfers nfts", "ai", "onch
 
 
 // Runs every 4 hours starting at midnight (Pacific Time)
-cron.schedule('0 0-23/1 * * *', async () => {
+cron.schedule('0 0-23/4 * * *', async () => {
   console.log('Running the scheduled tweetAssistantResponse...');
   const randomLength = lengths[Math.floor(Math.random() * lengths.length)];
   const prompt = `the next random tweet should be ${randomLength}.  remember always include $mfer. next`;
@@ -572,7 +572,7 @@ cron.schedule('30 7 * * *', async () => {
 });
 
 // Runs every day at 5pm Pacific Time
-cron.schedule('0 1,5,11,17 * * *', async () => {
+cron.schedule('0 2,6,10,14,18,22 * * *', async () => {
   console.log('Running scheduled task to fetch and post the most popular $mfer tweet...');
   await postMostPopularMferTweet();
 });
@@ -584,7 +584,7 @@ cron.schedule('30 6,18 * * *', async () => {
 });
 
 // Runs every 4 hours starting at midnight (Pacific Time)
-cron.schedule('* * * * *', async () => {
+cron.schedule('*/20 * * * *', async () => {
   console.log('Running reply to recent mention every minute');
   const USER_ID = '1724482668195110912'; // Replace with your actual user ID
   await fetchAndReplyToMostLikedMention(USER_ID);
