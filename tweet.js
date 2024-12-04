@@ -498,7 +498,7 @@ async function fetchAndReplyToMostLikedMention(userId, count = 10) {
     console.log(`Generating response for mention: "${mentionText}"`);
     const tweetJson = JSON.stringify(mostLikedMention, null, 2);
     const promptText = (newThread ? "reply to this tweet:" : "reply to the next tweet in the thread:");
-    await createMessage(threadId, `draw mfer 8292 on twitter`);
+    await createMessage(threadId, `${promptText} "${tweetJson}"`);
     const assistantResponse = await handleThread(threadId);
 
     if (!assistantResponse) {
