@@ -583,15 +583,19 @@ cron.schedule('30 6,18 * * *', async () => {
   await processRecentMints();
 });
 
-// Runs every 4 hours starting at midnight (Pacific Time)
-cron.schedule('*/20 * * * *', async () => {
-  console.log('Running reply to recent mention every minute');
+// Runs every 20 minutes starting at the 5-minute mark (Pacific Time)
+cron.schedule('5-59/20 * * * *', async () => {
+  console.log('Running reply to recent mention at the 5-minute mark');
   const USER_ID = '1724482668195110912'; // Replace with your actual user ID
   await fetchAndReplyToMostLikedMention(USER_ID);
 });
 
 // (async () => {
-//   await sendDailyGMTweet();
+//   console.log('Running the scheduled tweetAssistantResponse...');
+//   const randomLength = lengths[Math.floor(Math.random() * lengths.length)];
+//   const prompt = `the next random tweet should be ${randomLength}.  remember always include $mfer. next`;
+//   console.log(`Sending prompt: ${prompt}`);
+//   await tweetAssistantResponse(prompt);
 // })();
 
 // (async () => {
