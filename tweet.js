@@ -584,7 +584,7 @@ cron.schedule('30 6,18 * * *', async () => {
 });
 
 // Runs every 20 minutes starting at the 5-minute mark (Pacific Time)
-cron.schedule('5-59/20 * * * *', async () => {
+cron.schedule('5,25,45 * * * *', async () => {
   console.log('Running reply to recent mention at the 5-minute mark');
   const USER_ID = '1724482668195110912'; // Replace with your actual user ID
   await fetchAndReplyToMostLikedMention(USER_ID);
