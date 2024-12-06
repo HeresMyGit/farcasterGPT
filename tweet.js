@@ -150,7 +150,7 @@ async function generateTweetImage(mferId, tweetContent) {
   const backgroundColor = description.traits.background || "orange or blue";
 
   // Initial image prompt based on mfer description, background color, and tweet content
-  const initialPrompt = `A stylized depiction with a ${backgroundColor} background of ${description.description}, doing something that matches the content of this tweet: "${tweetContent}". \n\nMake it cool, sketchy, beautiful, stick figure, or realistic based on tweet vibe. Show the character doing a cool/powerful/chill/based/dope activity.  only return the prompt, do not include any extra text or greetings.`;
+  const initialPrompt = `Create an image PROMPT for: A stylized depiction with a ${backgroundColor} background of ${description.description}, doing something that matches the content of this tweet: "${tweetContent}". \n\nMake it cool, sketchy, beautiful, stick figure, or realistic based on tweet vibe. Show the character doing a cool/powerful/chill/based/dope activity.  only return the prompt, do not include any extra text or greetings. do NOT use the generate_image function, only return the prompt.`;
 
   console.log(`Initial image prompt: ${initialPrompt}`);
 
@@ -571,19 +571,19 @@ cron.schedule('30 7 * * *', async () => {
   await sendDailyGMTweet();
 });
 
-// Runs every day at 5pm Pacific Time
+// // Runs every day at 5pm Pacific Time
 cron.schedule('0 2,6,10,14,18,22 * * *', async () => {
   console.log('Running scheduled task to fetch and post the most popular $mfer tweet...');
   await postMostPopularMferTweet();
 });
 
-// Schedule the processRecentMints function to run at 6:30am and 6:30pm PT
+// // Schedule the processRecentMints function to run at 6:30am and 6:30pm PT
 cron.schedule('30 6,18 * * *', async () => {
   console.log('Running processRecentMints...');
   await processRecentMints();
 });
 
-// Runs every 20 minutes starting at the 5-minute mark (Pacific Time)
+// // Runs every 20 minutes starting at the 5-minute mark (Pacific Time)
 cron.schedule('5,25,45 * * * *', async () => {
   console.log('Running reply to recent mention at the 5-minute mark');
   const USER_ID = '1724482668195110912'; // Replace with your actual user ID
