@@ -533,6 +533,7 @@ async function fetchAndReplyToMostLikedMention(userId, count = 10) {
     }
 
     saveRepliedTweet(tweetId, threadId);
+    saveRepliedTweet(tweetResponse.data.id, threadId)
 
     console.log('Reply sent successfully!');
   } catch (error) {
