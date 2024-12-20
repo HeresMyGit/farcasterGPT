@@ -72,14 +72,14 @@ async function fetchMostPopularMferTweet() {
     }
 
     // Log all tweets for debugging
-    // console.log('Fetched tweets:', JSON.stringify(tweets, null, 2));
+    console.log('Fetched tweets:', JSON.stringify(tweets, null, 2));
 
     // Find the most popular tweet based on likes
     const mostPopularTweet = tweets.reduce((prev, current) =>
       (current.public_metrics.like_count > prev.public_metrics.like_count ? current : prev)
     );
 
-    // console.log('Most popular tweet:', JSON.stringify(mostPopularTweet, null, 2));
+    console.log('Most popular tweet:', JSON.stringify(mostPopularTweet, null, 2));
     return mostPopularTweet;
   } catch (error) {
     console.error('Error fetching $mfer tweets:', error.response ? error.response.data : error.message);
@@ -113,7 +113,7 @@ async function fetchMostLikedMentions(userId, count = 10) {
       return null;
     }
 
-    console.log('Fetched mentions:', JSON.stringify(mentions, null, 2));
+    // console.log('Fetched mentions:', JSON.stringify(mentions, null, 2));
 
     return mentions;
   } catch (error) {

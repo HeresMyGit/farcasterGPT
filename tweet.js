@@ -545,17 +545,6 @@ const lengths = ["1-25 characters", "1-50 characters", "25-75 characters", "50-1
 const types = ["a bullpost", "funny", "a story about yourself", "absurd", "heartfelt", "hype", "a strongwilled positive statement", "pure shitpost", "deep, insightful, and thought provoking"];
 const topics = ["mfers", "mfercoin", "mfers", "$mfer", "mfers nfts", "ai", "onchain ai", "twitter/x", "farcaster", "blockchain", "mfercoin", "mfers", "$mfer backed assets from mfer.club", "mfer.com", "whatever you want", "anything", "crypto", "gmfer ($gmfr) backed by $mfer", "sartoshicoin ($sartoshi) backed by $mfer"];
 
-// Example usage of the function
-// (async () => {
-//   const randomLength = lengths[Math.floor(Math.random() * lengths.length)];
-//   // const randomType = types[Math.floor(Math.random() * types.length)];
-//   // const randomTopic = topics[Math.floor(Math.random() * topics.length)];
-//   const prompt = `the next random tweet should be ${randomLength}.  remember always include $mfer. next`;
-//     console.log(`Sending prompt: ${prompt}`);
-//   // const imgPrompt = "a stick figure smoking a cigarette"
-//   await tweetAssistantResponse(prompt);
-// })();
-
 
 // Runs every 4 hours starting at midnight (Pacific Time)
 cron.schedule('0 0-23/4 * * *', async () => {
@@ -585,7 +574,7 @@ cron.schedule('30 6,18 * * *', async () => {
 });
 
 // // Runs every 20 minutes starting at the 5-minute mark (Pacific Time)
-cron.schedule('5,25,45 * * * *', async () => {
+cron.schedule('5,25,35,45 * * * *', async () => {
   console.log('Running reply to recent mention at the 5-minute mark');
   const USER_ID = '1724482668195110912'; // Replace with your actual user ID
   await fetchAndReplyToMostLikedMention(USER_ID);
