@@ -431,22 +431,32 @@ async function processRecentMints() {
 }
 
 async function fetchAndReplyToMostLikedMention(userId, count = 10) {
-  console.log(`Fetching the last ${count} tweets mentioning user ID: ${userId} and replying to the most liked one...`);
+  console.log(`Starting fetchAndReplyToMostLikedMention for user ID: ${userId} to reply to the most liked mention from the last ${count} mentions...`);
 
   try {
+    console.log('Fetching mentions...');
     const mentions = await fetchMostLikedMentions(userId, count);
+    console.log(`Mentions fetched successfully. Total mentions found: ${mentions ? mentions.length : 0}`);
 
     if (!mentions || mentions.length === 0) {
       console.log('No mentions found to reply to.');
       return;
     }
 
-    // Filter out mentions we've already replied to
+    console.log('Filtering out mentions we have already replied to...');
     const filteredMentions = [];
     for (const mention of mentions) {
-      const alreadyReplied = await hasRepliedToTweet(mention.id);
-      if (!alreadyReplied) {
-        filteredMentions.push(mention);
+      try {
+        console.log(`Checking if already replied to tweet ID: ${mention.id}...`);
+        const alreadyReplied = await hasRepliedToTweet(mention.id);
+        if (!alreadyReplied) {
+          filteredMentions.push(mention);
+          console.log(`Tweet ID: ${mention.id} has not been replied to.`);
+        } else {
+          console.log(`Tweet ID: ${mention.id} has already been replied to. Skipping.`);
+        }
+      } catch (error) {
+        console.error(`Error checking if we already replied to tweet ID: ${mention.id}`, error);
       }
     }
 
@@ -455,58 +465,67 @@ async function fetchAndReplyToMostLikedMention(userId, count = 10) {
       return;
     }
 
-    // Check for existing thread IDs in references
     for (const mention of filteredMentions) {
-      // Check the tweet ID itself for an existing threadId
-      const existingThreadIdForMention = await threadIdForTweet(mention.id);
-      if (existingThreadIdForMention) {
-        console.log(`Found existing threadId "${existingThreadIdForMention}" for tweetId "${mention.id}".`);
-        mention.threadId = existingThreadIdForMention; // Attach the existing threadId
-        continue; // Skip checking referenced tweets if found
-      }
-
-      // Check the referenced tweets for an existing threadId
-      const referencedTweetIds = mention.referenced_tweets?.map(ref => ref.id) || [];
-      for (const refId of referencedTweetIds) {
-        const existingThreadId = await threadIdForTweet(refId);
-        if (existingThreadId) {
-          console.log(`Found existing threadId "${existingThreadId}" for referenced tweetId "${refId}".`);
-          mention.threadId = existingThreadId; // Attach the existing threadId
-          break;
+      try {
+        console.log(`Checking existing thread ID for tweet ID: ${mention.id}...`);
+        const existingThreadIdForMention = await threadIdForTweet(mention.id);
+        if (existingThreadIdForMention) {
+          console.log(`Found existing threadId "${existingThreadIdForMention}" for tweetId "${mention.id}".`);
+          mention.threadId = existingThreadIdForMention;
+          continue;
         }
+
+        console.log(`Checking referenced tweets for tweet ID: ${mention.id}...`);
+        const referencedTweetIds = mention.referenced_tweets?.map(ref => ref.id) || [];
+        for (const refId of referencedTweetIds) {
+          try {
+            console.log(`Checking thread ID for referenced tweet ID: ${refId}...`);
+            const existingThreadId = await threadIdForTweet(refId);
+            if (existingThreadId) {
+              console.log(`Found existing threadId "${existingThreadId}" for referenced tweetId "${refId}".`);
+              mention.threadId = existingThreadId;
+              break;
+            }
+          } catch (error) {
+            console.error(`Error checking thread ID for referenced tweet ID: ${refId}`, error);
+          }
+        }
+      } catch (error) {
+        console.error(`Error processing thread information for tweet ID: ${mention.id}`, error);
       }
     }
 
-    // Find the most liked mention
+    console.log('Selecting the most liked mention from the filtered mentions...');
     const mostLikedMention = filteredMentions.reduce((prev, current) =>
       (current.public_metrics.like_count > prev.public_metrics.like_count ? current : prev)
     );
 
     const { id: tweetId, text: mentionText, threadId: existingThreadId } = mostLikedMention;
 
-    console.log(`Most liked mention: "${mentionText}" (Tweet ID: ${tweetId})`);
+    console.log(`Most liked mention selected: "${mentionText}" (Tweet ID: ${tweetId})`);
 
-    // Use existing threadId if available, or create a new one
     let threadId = existingThreadId;
     let newThread = false;
     if (!threadId) {
       newThread = true;
-      console.log(`No existing threadId found. Creating a new thread for tweetId "${tweetId}".`);
+      console.log(`No existing threadId found. Creating a new thread for tweetId "${tweetId}"...`);
       threadId = await createNewThread("Reply to Most Liked Mention");
+      console.log(`New thread created with threadId: ${threadId}`);
     }
 
-    console.log(`Generating response for mention: "${mentionText}"`);
+    console.log(`Generating a GPT response for mention: "${mentionText}"`);
     const tweetJson = JSON.stringify(mostLikedMention, null, 2);
     const promptText = (newThread ? "reply to this tweet:" : "reply to the next tweet in the thread:");
     await createMessage(threadId, `${promptText} "${tweetJson}"`);
-    const assistantResponse = await handleThread(threadId);
+    console.log('Message sent to GPT successfully. Waiting for GPT response...');
 
+    const assistantResponse = await handleThread(threadId);
     if (!assistantResponse) {
       console.error('Failed to generate GPT response. Skipping reply.');
       return;
     }
 
-    console.log('Generated response:', assistantResponse);
+    console.log('GPT response received:', assistantResponse);
 
     const pngUrls = assistantResponse.match(/https?:\/\/\S+\.png\b/g) || [];
     const localFilePaths = [];
@@ -514,31 +533,50 @@ async function fetchAndReplyToMostLikedMention(userId, count = 10) {
     if (pngUrls.length > 0) {
       console.log(`Downloading ${pngUrls.length} PNG URLs...`);
       const localImagesDir = path.join(__dirname, 'images');
-      if (!fs.existsSync(localImagesDir)) fs.mkdirSync(localImagesDir);
+      if (!fs.existsSync(localImagesDir)) {
+        console.log('Images directory does not exist. Creating it now...');
+        fs.mkdirSync(localImagesDir);
+      }
 
       for (const [index, imageUrl] of pngUrls.entries()) {
-        const localImagePath = path.join(localImagesDir, `image-${index + 1}.png`);
-        await downloadImage(imageUrl, localImagePath);
-        localFilePaths.push(localImagePath);
+        try {
+          console.log(`Downloading image from URL: ${imageUrl}...`);
+          const localImagePath = path.join(localImagesDir, `image-${index + 1}.png`);
+          await downloadImage(imageUrl, localImagePath);
+          localFilePaths.push(localImagePath);
+          console.log(`Image downloaded successfully to: ${localImagePath}`);
+        } catch (error) {
+          console.error(`Error downloading image from URL: ${imageUrl}`, error);
+        }
       }
     }
 
-    // Reply to the tweet
-    console.log(`Replying to Tweet ID: ${tweetId} with: "${assistantResponse}"`);
+    console.log(`Replying to Tweet ID: ${tweetId} with assistant response...`);
     await sendTweet(assistantResponse, localFilePaths, null, tweetId);
+    console.log('Reply sent successfully!');
 
-    // Clean up downloaded images
+    console.log('Cleaning up downloaded images...');
     for (const filePath of localFilePaths) {
-      await deleteLocalImage(filePath);
+      try {
+        console.log(`Deleting local image file: ${filePath}...`);
+        await deleteLocalImage(filePath);
+        console.log(`Image file deleted: ${filePath}`);
+      } catch (error) {
+        console.error(`Error deleting local image file: ${filePath}`, error);
+      }
     }
 
-    saveRepliedTweet(tweetId, threadId);
-    saveRepliedTweet(tweetResponse.data.id, threadId)
+    console.log(`Saving tweet reply record for Tweet ID: ${tweetId}...`);
+    await saveRepliedTweet(tweetId, threadId);
+    console.log(`Saving tweet reply record for the assistant's tweet...`);
+    await saveRepliedTweet(tweetResponse?.data?.id, threadId);
+    console.log('Reply records saved successfully!');
 
-    console.log('Reply sent successfully!');
   } catch (error) {
-    console.error('Error fetching mentions or replying:', error.response ? error.response.data : error.message);
+    console.error('Error fetching mentions or replying:', error?.response ? error.response.data : error?.message);
   }
+
+  console.log('fetchAndReplyToMostLikedMention execution completed.');
 }
 
 const lengths = ["1-25 characters", "1-50 characters", "25-75 characters", "50-100 characters", "75-150 characters", "150-240 characters"];
@@ -574,7 +612,7 @@ cron.schedule('30 6,18 * * *', async () => {
 });
 
 // // Runs every 20 minutes starting at the 5-minute mark (Pacific Time)
-cron.schedule('5,25,35,45 * * * *', async () => {
+cron.schedule('5,25,41,45 * * * *', async () => {
   console.log('Running reply to recent mention at the 5-minute mark');
   const USER_ID = '1724482668195110912'; // Replace with your actual user ID
   await fetchAndReplyToMostLikedMention(USER_ID);
