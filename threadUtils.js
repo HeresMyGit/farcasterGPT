@@ -10,6 +10,7 @@ const IMAGE_LOG_FILE = path.resolve(__dirname, '../farcasterGPT-Data/imageLog.js
 const MINT_LOG_FILE = path.resolve(__dirname, '../farcasterGPT-Data/mintLog.json');
 const USER_MINT_FILE = path.resolve(__dirname, '../farcasterGPT-Data/userMint.json');
 const REPLIED_TWEETS_FILE = path.resolve(__dirname, '../farcasterGPT-Data/repliedTweets.json');
+const MEMED_TWEETS_FILE = path.resolve(__dirname, '../farcasterGPT-Data/memedTweets.json');
 
 
 
@@ -199,6 +200,34 @@ function threadIdForTweet(tweetId) {
   return entry ? entry.threadId : null; // Return the threadId if found, otherwise null
 }
 
+// Load replied tweets from the file
+function loadMemedTweets() {
+  if (fs.existsSync(MEMED_TWEETS_FILE)) {
+    const data = fs.readFileSync(MEMED_TWEETS_FILE, 'utf-8');
+    return JSON.parse(data);
+  }
+  return [];
+}
+
+// Save a replied tweet with its threadId to the file
+function saveMemedTweet(tweetId, threadId) {
+  const repliedTweets = loadMemedTweets();
+  
+  // Check if the tweetId is already in the list
+  const exists = repliedTweets.some(entry => entry.tweetId === tweetId);
+  
+  if (!exists) {
+    repliedTweets.push(tweetId);
+    fs.writeFileSync(MEMED_TWEETS_FILE, JSON.stringify(repliedTweets, null, 2));
+  }
+}
+
+// Check if a tweet ID has been replied to
+function hasMemedToTweet(tweetId) {
+  const repliedTweets = loadRepliedTweets();
+  return repliedTweets.some(entry => entry.tweetId === tweetId);
+}
+
 module.exports = {
   loadThreadMappings,
   saveThreadMappings,
@@ -220,5 +249,8 @@ module.exports = {
   loadRepliedTweets,
   saveRepliedTweet,
   hasRepliedToTweet,
+  loadMemedTweets,
+  saveMemedTweet,
+  hasMemedToTweet,
   threadIdForTweet,
 };
