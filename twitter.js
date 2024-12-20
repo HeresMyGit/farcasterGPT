@@ -5,7 +5,8 @@ const crypto = require('crypto');
 const fs = require('fs'); // For reading image files
 const path = require('path');
 const FormData = require('form-data');
-const { loadMemedTweets, hasMemedToTweet, saveMemedTweet } = require('./threadUtils');
+const { loadMemedTweets, hasMemedToTweet, saveMemedTweet, saveRepliedTweet } = require('./threadUtils');
+
 
 // Get your OAuth credentials from environment variables
 const {
@@ -232,12 +233,6 @@ async function sendTweet(text, imagePaths = [], quoteTweetId = null, replyTweetI
     console.error('Error posting tweet:', error.response ? error.response.data : error.message);
   }
 }
-
-(async () => {
-  // const USER_ID = '1724482668195110912'; // Replace with your actual user ID
-  // await fetchAndReplyToMostLikedMention(USER_ID);
-  await fetchMostPopularMferTweet()
-})();
 
 module.exports = {
   sendTweet,
