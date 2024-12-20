@@ -5,6 +5,7 @@ const crypto = require('crypto');
 const fs = require('fs'); // For reading image files
 const path = require('path');
 const FormData = require('form-data');
+const { loadMemedTweets, hasMemedToTweet, saveMemedTweet } = require('./threadUtils');
 
 // Get your OAuth credentials from environment variables
 const {
@@ -48,7 +49,7 @@ async function fetchMostPopularMferTweet() {
   console.log('Fetching the most popular $mfer tweet from the last 6 hours...');
   try {
     const now = new Date();
-    const sixHoursAgo = new Date(now.getTime() - 24 * 60 * 60 * 1000).toISOString(); //24
+    const sixHoursAgo = new Date(now.getTime() - 24 * 60 * 60 * 1000).toISOString(); // 24 hours
     const baseURL = 'https://api.twitter.com/2/tweets/search/recent';
     const queryParams = `query=mfercoin&tweet.fields=public_metrics,referenced_tweets,attachments&media.fields=url&expansions=attachments.media_keys&start_time=${sixHoursAgo}&max_results=10`;
     const searchURL = `${baseURL}?${queryParams}`;
@@ -64,7 +65,7 @@ async function fetchMostPopularMferTweet() {
     });
 
     // Parse the response
-    const tweets = response.data.data;
+    const tweets = response.data?.data;
 
     if (!tweets || tweets.length === 0) {
       console.log('No tweets found for $mfer in the last 6 hours.');
@@ -74,12 +75,40 @@ async function fetchMostPopularMferTweet() {
     // Log all tweets for debugging
     console.log('Fetched tweets:', JSON.stringify(tweets, null, 2));
 
+    // Load the list of already memed tweet IDs
+    const memedTweets = await loadMemedTweets();
+
+    // Filter out tweets that have already been memed
+    const unmemedTweets = tweets.filter(tweet => !memedTweets.includes(tweet.id));
+
+    if (!unmemedTweets || unmemedTweets.length === 0) {
+      console.log('All fetched tweets have already been memed.');
+      return null;
+    }
+
+    // Log filtered tweets for debugging
+    console.log('Unmemed tweets:', JSON.stringify(unmemedTweets, null, 2));
+
     // Find the most popular tweet based on likes
-    const mostPopularTweet = tweets.reduce((prev, current) =>
+    const mostPopularTweet = unmemedTweets.reduce((prev, current) =>
       (current.public_metrics.like_count > prev.public_metrics.like_count ? current : prev)
     );
 
-    console.log('Most popular tweet:', JSON.stringify(mostPopularTweet, null, 2));
+    if (!mostPopularTweet || !mostPopularTweet.id) {
+      console.error('No valid tweet to save to memed list.');
+      return null;
+    }
+
+    console.log('Most popular unmemed tweet:', JSON.stringify(mostPopularTweet, null, 2));
+
+    // Save the most popular tweet's ID to the memed list
+    try {
+      await saveMemedTweet(mostPopularTweet.id);
+      console.log(`Saved tweet ID: ${mostPopularTweet.id} to memed list.`);
+    } catch (error) {
+      console.error(`Failed to save tweet ID: ${mostPopularTweet.id} to memed list.`, error);
+    }
+
     return mostPopularTweet;
   } catch (error) {
     console.error('Error fetching $mfer tweets:', error.response ? error.response.data : error.message);
@@ -189,11 +218,26 @@ async function sendTweet(text, imagePaths = [], quoteTweetId = null, replyTweetI
       },
     });
 
+    // Correctly access the tweet ID from the response and save it
+    const tweetId = response.data?.data?.id;
+    if (tweetId) {
+      await saveRepliedTweet(tweetId, replyTweetId || quoteTweetId);
+      console.log(`Saved replied tweet with ID: ${tweetId}`);
+    } else {
+      console.error('Failed to extract tweet ID from the response.');
+    }
+
     console.log('Tweet posted successfully:', response.data);
   } catch (error) {
     console.error('Error posting tweet:', error.response ? error.response.data : error.message);
   }
 }
+
+(async () => {
+  // const USER_ID = '1724482668195110912'; // Replace with your actual user ID
+  // await fetchAndReplyToMostLikedMention(USER_ID);
+  await fetchMostPopularMferTweet()
+})();
 
 module.exports = {
   sendTweet,
