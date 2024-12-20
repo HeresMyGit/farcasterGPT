@@ -65,7 +65,7 @@ async function fetchMostPopularMferTweet() {
     });
 
     // Parse the response
-    const tweets = response.data.data;
+    const tweets = response.data?.data;
 
     if (!tweets || tweets.length === 0) {
       console.log('No tweets found for $mfer in the last 6 hours.');
@@ -94,14 +94,22 @@ async function fetchMostPopularMferTweet() {
       (current.public_metrics.like_count > prev.public_metrics.like_count ? current : prev)
     );
 
+    if (!mostPopularTweet || !mostPopularTweet.id) {
+      console.error('No valid tweet to save to memed list.');
+      return null;
+    }
+
     console.log('Most popular unmemed tweet:', JSON.stringify(mostPopularTweet, null, 2));
 
     // Save the most popular tweet's ID to the memed list
-    await saveMemedTweet(mostPopularTweet.id);
-    console.log(`Saved tweet ID: ${mostPopularTweet.id} to memed list.`);
+    try {
+      await saveMemedTweet(mostPopularTweet.id);
+      console.log(`Saved tweet ID: ${mostPopularTweet.id} to memed list.`);
+    } catch (error) {
+      console.error(`Failed to save tweet ID: ${mostPopularTweet.id} to memed list.`, error);
+    }
 
-    // return mostPopularTweet;
-    return null
+    return mostPopularTweet;
   } catch (error) {
     console.error('Error fetching $mfer tweets:', error.response ? error.response.data : error.message);
     return null;
@@ -210,11 +218,26 @@ async function sendTweet(text, imagePaths = [], quoteTweetId = null, replyTweetI
       },
     });
 
+    // Correctly access the tweet ID from the response and save it
+    const tweetId = response.data?.data?.id;
+    if (tweetId) {
+      await saveRepliedTweet(tweetId, replyTweetId || quoteTweetId);
+      console.log(`Saved replied tweet with ID: ${tweetId}`);
+    } else {
+      console.error('Failed to extract tweet ID from the response.');
+    }
+
     console.log('Tweet posted successfully:', response.data);
   } catch (error) {
     console.error('Error posting tweet:', error.response ? error.response.data : error.message);
   }
 }
+
+(async () => {
+  // const USER_ID = '1724482668195110912'; // Replace with your actual user ID
+  // await fetchAndReplyToMostLikedMention(USER_ID);
+  await fetchMostPopularMferTweet()
+})();
 
 module.exports = {
   sendTweet,
