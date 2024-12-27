@@ -459,6 +459,86 @@ function addHamTip(inputString, multiplier = 15) {
     }
 }
 
+
+async function handleNiftyIslandWebhook(req, res) {
+  try {
+    console.log('Nifty Island webhook data:', JSON.stringify(req.body, null, 2));
+
+    // Per Nifty Island docs, they POST something like:
+    // {
+    //   "text": "Player's in-game message",
+    //   "user": "Human-readable username"
+    // }
+
+    const { text, user } = req.body;
+
+    // 1) Create a new thread (similar to handleWebhook logic)
+    const threadId = await createNewThread(`Nifty Island Chat - ${user}`);
+
+    // 2) Build a JSON payload to pass as "user" content to the Assistant
+    const userMessageObject = {
+      instructions: [
+        "You are a chatbot agent inside a game. The user typed some text in-game.",
+        "Please respond in JSON format with the structure: { \"text\": string, \"action\": string }.",
+        "If unsure about the action, default to 'EMOTE'.",
+        `User message: ${text}`
+      ],
+      data: {
+        text,
+        user
+      }
+    };
+
+    // Convert to a JSON string for openAI
+    const userMessage = JSON.stringify(userMessageObject, null, 2);
+
+    // 3) Add message to the newly created thread
+    await createMessage(threadId, userMessage);
+
+    // 4) Run the Assistant on that thread (OpenAI Assistants, not chat completions)
+    const run = await runThread(threadId, process.env.NIFTY_MODEL);
+
+    // Fallback in case the Assistant's reply isn't valid JSON
+    let botMessage = "{\"text\":\"sorry mfer my circuits got scrambled, pls try again in a minute\",\"action\":\"NONE\"}";
+
+    if (run && run.status === 'completed') {
+      // Pull down messages from the thread
+      const messages = await openai.beta.threads.messages.list(run.thread_id);
+      if (messages?.data?.length) {
+        const assistantMessages = messages.data.filter(msg => msg.role === 'assistant');
+        if (assistantMessages.length > 0) {
+          // The Assistant may produce valid JSON or plain text
+          botMessage = assistantMessages[0].content[0].text.value;
+        }
+      }
+    } else {
+      console.error(`[Nifty] Run missing or incomplete. Status: ${run?.status}`);
+    }
+
+    // Attempt to parse botMessage as JSON; if invalid, wrap it
+    let finalResponse;
+    try {
+      finalResponse = JSON.parse(botMessage);
+    } catch (err) {
+      console.log('[Nifty] Response not valid JSON; converting...');
+      finalResponse = {
+        text: botMessage,
+        action: "NONE"
+      };
+    }
+
+    // Return JSON shaped per Nifty Island’s doc:
+    // { "text": "...", "action": "..." }
+    return res.json(finalResponse);
+  } catch (error) {
+    console.error('[Nifty] Error in handleNiftyIslandWebhook:', error);
+    return res.json({
+      text: "An error occurred with the Nifty Island webhook.",
+      action: "NONE"
+    });
+  }
+}
+
 module.exports = {
   handleRequiresAction,
   createNewThread,
@@ -467,4 +547,5 @@ module.exports = {
   generateImage,
   handleWebhook,
   splitMessageIntoChunks,
+  handleNiftyIslandWebhook
 };
