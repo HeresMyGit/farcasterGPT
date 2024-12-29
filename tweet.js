@@ -201,7 +201,7 @@ async function tweetAssistantResponse(prompt) {
       const customImagePath = path.join(__dirname, 'custom-image.png');
       await downloadImage(customImageUrl, customImagePath); // Download custom image
 
-      await sendTweet(assistantResponse, [localImagePath, customImagePath]); // Send tweet with both images
+      await sendTweet(assistantResponse, [localImagePath, customImagePath], null, null, threadId); // Send tweet with both images
 
       // Delete images after use
       await deleteLocalImage(localImagePath);
@@ -242,7 +242,7 @@ async function sendDailyGMTweet() {
     await downloadImage(imageUrl, localImagePath);
 
     // Send tweet
-    await sendTweet(tweetContent, [localImagePath]);
+    await sendTweet(tweetContent, [localImagePath], null, null, threadId);
 
     // Clean up the image file
     await deleteLocalImage(localImagePath);
@@ -324,7 +324,7 @@ async function postMostPopularMferTweet() {
 
       console.log(`Posting the quote tweet: ${gptResponse}`);
       // Uncomment the following line to post the tweet
-      await sendTweet(gptResponse, [localImagePath], tweetId);
+      await sendTweet(gptResponse, [localImagePath], tweetId, null, threadId);
 
       // Clean up local image file
       await deleteLocalImage(localImagePath);
@@ -417,7 +417,7 @@ async function processRecentMints() {
 
     // Post the tweet with images
     console.log('Posting multiple mints to Twitter with images: ', validImagePaths);
-    await sendTweet(tweetContent, validImagePaths);
+    await sendTweet(tweetContent, validImagePaths, null, null, threadId);
 
     // Delete the downloaded images after successful tweet
     for (const imagePath of validImagePaths) {
@@ -525,7 +525,7 @@ async function fetchAndReplyToMostLikedMention(userId, count = 10) {
 
     // Reply to the tweet
     console.log(`Replying to Tweet ID: ${tweetId} with: "${assistantResponse}"`);
-    await sendTweet(assistantResponse, localFilePaths, null, tweetId);
+    await sendTweet(assistantResponse, localFilePaths, null, tweetId, threadId);
 
     // Clean up downloaded images
     for (const filePath of localFilePaths) {
