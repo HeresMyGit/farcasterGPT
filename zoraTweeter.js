@@ -130,7 +130,7 @@ async function postNFTToTwitter(nftJson) {
     const tweetContent = `${assistantResponse}\n\n${zora}`;
 
     // Post to Twitter with image
-    await sendTweet(tweetContent, [imagePath]);
+    await sendTweet(tweetContent, [imagePath], null, null, thread.id);
 
     // Delete the temporary image file
     fs.unlinkSync(imagePath);

@@ -172,7 +172,7 @@ async function uploadMedia(imagePath) {
   return response.data.media_id_string;
 }
 
-async function sendTweet(text, imagePaths = [], quoteTweetId = null, replyTweetId = null) {
+async function sendTweet(text, imagePaths = [], quoteTweetId = null, replyTweetId = null, openAIThreadId = null) {
   try {
     let media_ids = [];
     console.log("images: ", imagePaths);
@@ -222,7 +222,7 @@ async function sendTweet(text, imagePaths = [], quoteTweetId = null, replyTweetI
     // Correctly access the tweet ID from the response and save it
     const tweetId = response.data?.data?.id;
     if (tweetId) {
-      await saveRepliedTweet(tweetId, replyTweetId || quoteTweetId);
+      await saveRepliedTweet(tweetId, openAIThreadId);
       console.log(`Saved replied tweet with ID: ${tweetId}`);
     } else {
       console.error('Failed to extract tweet ID from the response.');
