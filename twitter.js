@@ -48,11 +48,17 @@ function generateAuthHeader(url, method) {
 
 async function fetchMostPopularMferTweet() {
   console.log('Fetching the most popular $mfer tweet from the last 6 hours...');
+
+  // Hard-coded list of author IDs to ignore
+  const ignoredAuthorIds = [
+    '1522162732451377153', 
+  ];
+
   try {
     const now = new Date();
     const sixHoursAgo = new Date(now.getTime() - 24 * 60 * 60 * 1000).toISOString(); // 24 hours
     const baseURL = 'https://api.twitter.com/2/tweets/search/recent';
-    const queryParams = `query=mfercoin&tweet.fields=public_metrics,referenced_tweets,attachments&media.fields=url&expansions=attachments.media_keys&start_time=${sixHoursAgo}&max_results=10`;
+    const queryParams = `query=mfercoin&tweet.fields=public_metrics,referenced_tweets,attachments,author_id&user.fields=username,profile_image_url,name&media.fields=url&expansions=attachments.media_keys,author_id&start_time=${sixHoursAgo}&max_results=10`;
     const searchURL = `${baseURL}?${queryParams}`;
 
     // Use Bearer Token for authorization
@@ -65,25 +71,29 @@ async function fetchMostPopularMferTweet() {
       }
     });
 
-    // Parse the response
     const tweets = response.data?.data;
+    const users = response.data?.includes?.users;
 
     if (!tweets || tweets.length === 0) {
       console.log('No tweets found for $mfer in the last 6 hours.');
       return null;
     }
 
-    // Log all tweets for debugging
+    // Log all tweets and user data for debugging
     console.log('Fetched tweets:', JSON.stringify(tweets, null, 2));
+    console.log('Fetched users:', JSON.stringify(users, null, 2));
 
     // Load the list of already memed tweet IDs
     const memedTweets = await loadMemedTweets();
 
-    // Filter out tweets that have already been memed
-    const unmemedTweets = tweets.filter(tweet => !memedTweets.includes(tweet.id));
+    // Filter out tweets that have already been memed and those from ignored authors
+    const unmemedTweets = tweets.filter(tweet => 
+      !memedTweets.includes(tweet.id) &&
+      !ignoredAuthorIds.includes(tweet.author_id)
+    );
 
     if (!unmemedTweets || unmemedTweets.length === 0) {
-      console.log('All fetched tweets have already been memed.');
+      console.log('All fetched tweets are either already memed or authored by ignored accounts.');
       return null;
     }
 
@@ -100,7 +110,12 @@ async function fetchMostPopularMferTweet() {
       return null;
     }
 
+    // Get the user information for the most popular tweet
+    const authorId = mostPopularTweet.author_id;
+    const userInfo = users?.find(user => user.id === authorId);
+
     console.log('Most popular unmemed tweet:', JSON.stringify(mostPopularTweet, null, 2));
+    console.log('User info for the tweet:', JSON.stringify(userInfo, null, 2));
 
     // Save the most popular tweet's ID to the memed list
     try {
