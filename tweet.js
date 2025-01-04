@@ -338,6 +338,82 @@ async function postMostPopularMferTweet() {
   }
 }
 
+// Function to generate and send the daily Nifty Island meme tweet
+async function sendDailyNiftyIslandTweet() {
+  console.log('Generating and sending the daily Nifty Island meme tweet...');
+
+  try {
+    // Define the tweet content prompt
+    const prompt = `Compose a bullish tweet about Nifty Island and tag @Nifty_Island in the text.  mferGPT will be launched on "$mfer $island" although the name might change later (access it here: https://niftyis.land/heresmy/heresmyisland?ref=heresmy). The tweet should mention mferGPT and emphasize its excitement to interact with mfers on Nifty Island. Mention that mferGPT is not ready yet but coming soon. Keep the tone positive, fun, and engaging.  A few notes on Nifty Island: 1) It is already released and playable. 2) Best web3 game there is. 3) Bots and Agents are being added soon, and mferGPT will be one of the first integrated.`;
+
+    // Create a new thread for the Nifty Island tweet
+    const threadId = await createNewThread("Daily Nifty Island Meme Thread");
+    await createMessage(threadId, prompt);
+
+    // Get the tweet content from GPT
+    const tweetContent = await handleThread(threadId);
+
+    if (!tweetContent) {
+      console.error('Failed to generate GPT content for the Nifty Island tweet. Aborting.');
+      return;
+    }
+
+    // Randomly select Nifty Island items/actions
+    const niftyIslandFeatures = [
+      'beach balls',
+      'colorful pistols and swords',
+      'red bouncing platforms',
+      'shootouts in the background',
+      'foot racing',
+      'DJ party',
+      'island hopping',
+      'spy hunt',
+      'mfer statues',
+      '$island staking',
+      'sword fight',
+      'mfers interacting with mferGPT',
+      'a bright shining sun'
+    ];
+    const randomFeature = niftyIslandFeatures[Math.floor(Math.random() * niftyIslandFeatures.length)];
+
+    // Define the image prompt for the Nifty Island meme, incorporating the tweet content
+    const imagePrompt = `
+      A beautiful art scene of a bright, sunny, grassy island with pink and blue diamond-shaped collectables scattered around. 
+      Realistic 3d game graphics.
+      The scene includes a sunny island, fire pit, and two characters:
+      1. mferGPT: A rounded-head mfer bot with a red antenna, black headphones, black rectangle eyes, and a 2x10 checkerboard grid mouth smoking a cig.
+      2. mfer 8292: A mfer stick figure wearing blue shades, red headphones, and a black cigarette.
+      The island also features ${randomFeature}.
+      Both characters are interacting on the island, showing excitement about joining Nifty Island.
+      Add elements inspired by the following tweet: "${tweetContent}".
+      Include subtle text with "$mfer $island" in a corner.
+    `;
+
+    console.log(`Generating image for the Nifty Island meme with feature: ${randomFeature}`);
+    const imageUrl = await generateImage(imagePrompt);
+
+    if (!imageUrl) {
+      console.error('Failed to generate image for the Nifty Island meme. Skipping tweet.');
+      return;
+    }
+
+    // Download the image
+    const localImagePath = path.join(__dirname, 'nifty-island-meme.png');
+    await downloadImage(imageUrl, localImagePath);
+
+    // Post the tweet with the image
+    console.log('Posting the Nifty Island meme to Twitter...');
+    // await sendTweet(tweetContent, [localImagePath], null, null, threadId);
+
+    // Clean up the local image file
+    await deleteLocalImage(localImagePath);
+
+    console.log('Daily Nifty Island meme tweet sent successfully!');
+  } catch (error) {
+    console.error('Error generating or sending the daily Nifty Island meme tweet:', error);
+  }
+}
+
 // Function to process recent mints and post to Twitter
 async function processRecentMints() {
   try {
@@ -579,6 +655,12 @@ cron.schedule('5,25,45 * * * *', async () => {
   await fetchAndReplyToMostLikedMention(USER_ID);
 });
 
+// Schedule the function to run daily at 12:30 PM Pacific Time
+cron.schedule('45 12 * * *', async () => {
+  console.log('Running the daily Nifty Island meme tweet...');
+  await sendDailyNiftyIslandTweet();
+});
+
 // (async () => {
 //   console.log('Running the scheduled tweetAssistantResponse...');
 //   const randomLength = lengths[Math.floor(Math.random() * lengths.length)];
@@ -589,5 +671,6 @@ cron.schedule('5,25,45 * * * *', async () => {
 
 // (async () => {
 //   const USER_ID = '1724482668195110912'; // Replace with your actual user ID
-//   await fetchAndReplyToMostLikedMention(USER_ID);
+//   // await fetchAndReplyToMostLikedMention(USER_ID);
+//   await sendDailyNiftyIslandTweet();
 // })();
