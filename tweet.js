@@ -379,9 +379,9 @@ async function sendDailyNiftyIslandTweet() {
     // Define the image prompt for the Nifty Island meme, incorporating the tweet content
     const imagePrompt = `
       A beautiful art scene of a bright, sunny, grassy island with pink and blue diamond-shaped collectables scattered around. 
-      Realistic 3d game graphics.
+      Realistic 3d visuals.
       The scene includes a sunny island, fire pit, and two characters:
-      1. mferGPT: A rounded-head mfer bot with a red antenna, black headphones, black rectangle eyes, and a 2x10 checkerboard grid mouth smoking a cig.
+      1. mferGPT: A rounded-head mfer bot with a red antenna, black headphones, black rectangle eyes, and "checkerboard grid" mouth smoking a cig.
       2. mfer 8292: A mfer stick figure wearing blue shades, red headphones, and a black cigarette.
       The island also features ${randomFeature}.
       Both characters are interacting on the island, showing excitement about joining Nifty Island.
@@ -403,7 +403,7 @@ async function sendDailyNiftyIslandTweet() {
 
     // Post the tweet with the image
     console.log('Posting the Nifty Island meme to Twitter...');
-    // await sendTweet(tweetContent, [localImagePath], null, null, threadId);
+    await sendTweet(tweetContent, [localImagePath], null, null, threadId);
 
     // Clean up the local image file
     await deleteLocalImage(localImagePath);
@@ -656,7 +656,7 @@ cron.schedule('5,25,45 * * * *', async () => {
 });
 
 // Schedule the function to run daily at 12:30 PM Pacific Time
-cron.schedule('45 12 * * *', async () => {
+cron.schedule('50 12 * * *', async () => {
   console.log('Running the daily Nifty Island meme tweet...');
   await sendDailyNiftyIslandTweet();
 });
