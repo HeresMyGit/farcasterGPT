@@ -344,7 +344,7 @@ async function sendDailyNiftyIslandTweet() {
 
   try {
     // Define the tweet content prompt
-    const prompt = `Compose a bullish tweet about Nifty Island and tag @Nifty_Island in the text.  mferGPT will be launched on "$mfer $island" (access it here: https://niftyis.land/heresmy/heresmyisland?ref=heresmy). The tweet should mention mferGPT and emphasize its excitement to interact with mfers on Nifty Island very soon. Keep the tone positive, fun, and engaging.  A few notes on Nifty Island: 1) It is already released and playable. 2) Best web3 game there is. 3) Bots and Agents are being added soon, and mferGPT will be one of the first integrated. 4) Shooting games, races, infection, pvp, hang out, so much to do!`;
+    const prompt = `Compose a bullish tweet about Nifty Island and tag @Nifty_Island in the text.  Don't use emoji in the body, only at the end of the post.  mferGPT will be launched on "$mfer $island" (access it here: https://niftyis.land/heresmy/heresmyisland?ref=heresmy). The tweet should mention mferGPT and emphasize its excitement to interact with mfers on Nifty Island very soon. Keep the tone positive, fun, and engaging.  A few notes on Nifty Island: 1) It is already released and playable. 2) Best web3 game there is. 3) Bots and Agents are being added soon, and mferGPT will be one of the first integrated. 4) Shooting games, races, infection, pvp, hang out, so much to do!`;
 
     // Create a new thread for the Nifty Island tweet
     const threadId = await createNewThread("Daily Nifty Island Meme Thread");
@@ -372,21 +372,22 @@ async function sendDailyNiftyIslandTweet() {
       '$island staking',
       'sword fight',
       'mfers interacting with mferGPT',
-      'a bright shining sun'
+      'a bright shining sun',
+      'pink and blue flat-diamond-shaped collectables scattered around (like a playing card diamond shape)'
     ];
     const randomFeature = niftyIslandFeatures[Math.floor(Math.random() * niftyIslandFeatures.length)];
 
     // Define the image prompt for the Nifty Island meme, incorporating the tweet content
     const imagePrompt = `
-      A beautiful postcard inspired art scene of a bright, sunny, grassy island with pink and blue diamond-shaped collectables scattered around. 
-      Realistic 3d visuals.
+      A beautiful postcard inspired scene of a bright, sunny, grassy island named "Nifty Island". 
       The scene includes a sunny island, fire pit, and two characters:
-      1. mferGPT: A rounded-head mfer bot with a red antenna, black headphones, black rectangle eyes, and "checkerboard grid" mouth smoking a cig.
-      2. mfer 8292: A mfer stick figure wearing blue shades, red headphones, and a black cigarette.
-      The island also features ${randomFeature}.
+      1. mferGPT: A rounded-head stick figure bot with a red antenna, black headphones, black rectangle eyes, and "checkerboard" mouth smoking a cig.
+      2. mfer 8292: A stick figure wearing blue shades, red headphones, and smoking a black cigarette.
       Both characters are interacting on the island, showing excitement about joining Nifty Island.
+      The island also features ${randomFeature}.
       Add elements inspired by the following tweet: "${tweetContent}".
       Include subtle text with "$mfer $island" in a corner.
+      Soft, realistic, warm visuals.
     `;
 
     console.log(`Generating image for the Nifty Island meme with feature: ${randomFeature}`);
@@ -672,5 +673,5 @@ cron.schedule('50 12 * * *', async () => {
 // (async () => {
 //   const USER_ID = '1724482668195110912'; // Replace with your actual user ID
 //   // await fetchAndReplyToMostLikedMention(USER_ID);
-//   await postMostPopularMferTweet();
+//   await sendDailyNiftyIslandTweet();
 // })();
