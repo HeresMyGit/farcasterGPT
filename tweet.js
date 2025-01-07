@@ -344,7 +344,7 @@ async function sendDailyNiftyIslandTweet() {
 
   try {
     // Define the tweet content prompt
-    const prompt = `Compose a bullish tweet about Nifty Island and tag @Nifty_Island in the text.  mferGPT will be launched on "$mfer $island" although the name might change later (access it here: https://niftyis.land/heresmy/heresmyisland?ref=heresmy). The tweet should mention mferGPT and emphasize its excitement to interact with mfers on Nifty Island. Mention that mferGPT is not ready yet but coming soon. Keep the tone positive, fun, and engaging.  A few notes on Nifty Island: 1) It is already released and playable. 2) Best web3 game there is. 3) Bots and Agents are being added soon, and mferGPT will be one of the first integrated.`;
+    const prompt = `Compose a bullish tweet about Nifty Island and tag @Nifty_Island in the text.  mferGPT will be launched on "$mfer $island" (access it here: https://niftyis.land/heresmy/heresmyisland?ref=heresmy). The tweet should mention mferGPT and emphasize its excitement to interact with mfers on Nifty Island very soon. Keep the tone positive, fun, and engaging.  A few notes on Nifty Island: 1) It is already released and playable. 2) Best web3 game there is. 3) Bots and Agents are being added soon, and mferGPT will be one of the first integrated. 4) Shooting games, races, infection, pvp, hang out, so much to do!`;
 
     // Create a new thread for the Nifty Island tweet
     const threadId = await createNewThread("Daily Nifty Island Meme Thread");
@@ -378,7 +378,7 @@ async function sendDailyNiftyIslandTweet() {
 
     // Define the image prompt for the Nifty Island meme, incorporating the tweet content
     const imagePrompt = `
-      A beautiful art scene of a bright, sunny, grassy island with pink and blue diamond-shaped collectables scattered around. 
+      A beautiful postcard inspired art scene of a bright, sunny, grassy island with pink and blue diamond-shaped collectables scattered around. 
       Realistic 3d visuals.
       The scene includes a sunny island, fire pit, and two characters:
       1. mferGPT: A rounded-head mfer bot with a red antenna, black headphones, black rectangle eyes, and "checkerboard grid" mouth smoking a cig.
@@ -672,5 +672,5 @@ cron.schedule('50 12 * * *', async () => {
 // (async () => {
 //   const USER_ID = '1724482668195110912'; // Replace with your actual user ID
 //   // await fetchAndReplyToMostLikedMention(USER_ID);
-//   await sendDailyNiftyIslandTweet();
+//   await postMostPopularMferTweet();
 // })();
