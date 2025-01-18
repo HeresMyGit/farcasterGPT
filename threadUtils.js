@@ -11,6 +11,7 @@ const MINT_LOG_FILE = path.resolve(__dirname, '../farcasterGPT-Data/mintLog.json
 const USER_MINT_FILE = path.resolve(__dirname, '../farcasterGPT-Data/userMint.json');
 const REPLIED_TWEETS_FILE = path.resolve(__dirname, '../farcasterGPT-Data/repliedTweets.json');
 const MEMED_TWEETS_FILE = path.resolve(__dirname, '../farcasterGPT-Data/memedTweets.json');
+const NIFTY_THREADS_FILE = path.resolve(__dirname, '../farcasterGPT-Data/niftyThreads.json');
 
 
 
@@ -228,6 +229,31 @@ function hasMemedToTweet(tweetId) {
   return repliedTweets.some(entry => entry.tweetId === tweetId);
 }
 
+function loadNiftyThreads() {
+  if (fs.existsSync(NIFTY_THREADS_FILE)) {
+    const data = fs.readFileSync(NIFTY_THREADS_FILE, 'utf-8');
+    return JSON.parse(data);
+  }
+  // Return an object here instead of an array
+  return {};
+}
+
+function saveNiftyThread(username, threadId) {
+  const niftyThreads = loadNiftyThreads();
+  niftyThreads[username] = threadId;  // Store mapping of user -> threadId
+  fs.writeFileSync(NIFTY_THREADS_FILE, JSON.stringify(niftyThreads, null, 2));
+}
+
+function getNiftyThreadForUser(username) {
+  const niftyThreads = loadNiftyThreads();
+  return niftyThreads[username] || null;
+}
+
+function hasNiftyThread(username) {
+  const niftyThreads = loadNiftyThreads();
+  return Object.prototype.hasOwnProperty.call(niftyThreads, username);
+}
+
 module.exports = {
   loadThreadMappings,
   saveThreadMappings,
@@ -253,4 +279,8 @@ module.exports = {
   saveMemedTweet,
   hasMemedToTweet,
   threadIdForTweet,
+  loadNiftyThreads,
+  saveNiftyThread,
+  getNiftyThreadForUser,
+  hasNiftyThread,
 };
