@@ -28,7 +28,7 @@ async function handleNiftyIslandWebhook(req, res) {
   try {
     console.log('Nifty Island webhook data:', JSON.stringify(req.body, null, 2));
 
-    const { text, userName, userId, version, niftyKnowledge } = req.body;
+    const { text, userName, userId, version } = req.body;
 
     // Check version compatibility
     if (version !== '0.1') {
@@ -37,8 +37,11 @@ async function handleNiftyIslandWebhook(req, res) {
 
     let threadId;
     
-    // If we receive nifty knowledge, always create a new thread
-    if (niftyKnowledge) {
+    // Check for the special message that triggers new thread creation
+    const forceNewThread = text.includes("new-custom-knowledge1234");
+    
+    // Create new thread if we have niftyKnowledge or the special message is detected
+    if (forceNewThread) {
       threadId = await createNewThread(`Nifty Island Chat - ${userName}`);
       // Save/update the thread mapping for this user
       saveNiftyThread(userName, threadId);
@@ -46,7 +49,6 @@ async function handleNiftyIslandWebhook(req, res) {
       // Create initial message with knowledge injection
       const initialMessage = {
         instructions: [
-          niftyKnowledge,
           `User message: ${text}`
         ],
         data: {

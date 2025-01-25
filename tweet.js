@@ -344,7 +344,7 @@ async function sendDailyNiftyIslandTweet() {
 
   try {
     // Define the tweet content prompt
-    const prompt = `Compose a bullish tweet about Nifty Island and tag @Nifty_Island in the text.  Don't use emoji in the body, only at the end of the post.  mferGPT will be launched on "$mfer $island" (access it here: https://niftyis.land/heresmy/heresmyisland?ref=heresmy). The tweet should mention mferGPT and emphasize its excitement to interact with mfers on Nifty Island very soon. Keep the tone positive, fun, and engaging.  A few notes on Nifty Island: 1) It is already released and playable. 2) Best web3 game there is. 3) Bots and Agents are being added soon, and mferGPT will be one of the first integrated. 4) Shooting games, races, infection, pvp, hang out, so much to do!`;
+    const prompt = `Compose a bullish tweet about Nifty Island and tag @Nifty_Island in the text.  Don't use emoji in the body, only at the end of the post.  mferGPT has been launched on "$mfer $island" (access it here: https://niftyis.land/heresmy/heresmyisland?ref=heresmy). The tweet should mention mferGPT and emphasize its excitement for interacting with mfers on Nifty Island. Keep the tone positive, fun, and engaging.  A few notes on Nifty Island: 1) It is already released and playable. 2) Best web3 game there is. 3) Bots and Agents are now integrated, and mferGPT is one of the first integrated. 4) Shooting games, races, infection, pvp, hang out, so much to do!`;
 
     // Create a new thread for the Nifty Island tweet
     const threadId = await createNewThread("Daily Nifty Island Meme Thread");
@@ -388,6 +388,8 @@ async function sendDailyNiftyIslandTweet() {
       Add elements inspired by the following tweet: "${tweetContent}".
       Include subtle text with "$mfer $island" in a corner.
       Soft, realistic, warm visuals.
+      Beautiful Unity style 3d graphics.
+      Large island islandscapes and beaches.
     `;
 
     console.log(`Generating image for the Nifty Island meme with feature: ${randomFeature}`);
