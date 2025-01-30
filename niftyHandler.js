@@ -130,6 +130,9 @@ async function handleNiftyIslandWebhook(req, res) {
       ...(responseObject.actionContext && { actionContext: responseObject.actionContext })
     }];
 
+    // Log the response
+    console.log('[Nifty] Bot response:', JSON.stringify(cleanResponse, null, 2));
+
     // Send the response
     return res.json(cleanResponse);
   } catch (error) {
