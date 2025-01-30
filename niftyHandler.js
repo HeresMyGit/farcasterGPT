@@ -40,37 +40,42 @@ async function handleNiftyIslandWebhook(req, res) {
     // Check for the special message that triggers new thread creation
     const forceNewThread = text.includes("new-custom-knowledge1234");
     
-    // Create new thread if we have niftyKnowledge or the special message is detected
-    if (forceNewThread) {
+    // Get existing thread for user
+    threadId = getNiftyThreadForUser(userName);
+    
+    // Create new thread if none exists or if force new thread
+    if (!threadId || forceNewThread) {
       threadId = await createNewThread(`Nifty Island Chat - ${userName}`);
       // Save/update the thread mapping for this user
       saveNiftyThread(userName, threadId);
       
-      // Create initial message with knowledge injection
-      const initialMessage = {
-        instructions: [
-          `User message: ${text}`
-        ],
-        data: {
-          text,
-          userName,
-          userId,
-          version
-        }
-      };
-      
-      await createMessage(threadId, JSON.stringify(initialMessage, null, 2));
-    } else {
-      // Check for existing thread
-      threadId = getNiftyThreadForUser(userName);
-      
-      if (!threadId) {
-        // Create new thread if none exists
-        threadId = await createNewThread(`Nifty Island Chat - ${userName}`);
-        saveNiftyThread(userName, threadId);
+      if (forceNewThread) {
+        // Create initial message with knowledge injection
+        const initialMessage = {
+          instructions: [
+            `User message: ${text}`
+          ],
+          data: {
+            text,
+            userName,
+            userId,
+            version
+          }
+        };
+        await createMessage(threadId, JSON.stringify(initialMessage, null, 2));
+      } else {
+        // Simple message format for new thread
+        await createMessage(threadId, JSON.stringify({
+          data: {
+            text,
+            userName,
+            userId,
+            version
+          }
+        }, null, 2));
       }
-      
-      // Simple message format for continuing conversation
+    } else {
+      // Continue existing conversation
       await createMessage(threadId, JSON.stringify({
         data: {
           text,
