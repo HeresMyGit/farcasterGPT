@@ -275,7 +275,7 @@ async function postMostPopularMferTweet() {
 //       "16_1855707100300636160"
 //     ]
 //   },
-//   "text": "Look at the market and growth with base. Deep Value is mfercoin and it’s not if but when. Light it up block out the noise and just watch that $mfer go on the run that wakes up normies! No one even knows BTC is 80K. A stick man going parabolic wakes us out of our bones globally https://t.co/0PxkzzlQcG"
+//   "text": "Look at the market and growth with base. Deep Value is mfercoin and it's not if but when. Light it up block out the noise and just watch that $mfer go on the run that wakes up normies! No one even knows BTC is 80K. A stick man going parabolic wakes us out of our bones globally https://t.co/0PxkzzlQcG"
 // }
 
   if (mostPopularTweet) {
@@ -625,7 +625,7 @@ const topics = ["mfers", "mfercoin", "mfers", "$mfer", "mfers nfts", "ai", "onch
 
 
 // Runs every 4 hours starting at midnight (Pacific Time)
-cron.schedule('0 0-23/4 * * *', async () => {
+cron.schedule('0 0-23/8 * * *', async () => {
   console.log('Running the scheduled tweetAssistantResponse...');
   const randomLength = lengths[Math.floor(Math.random() * lengths.length)];
   const prompt = `the next random tweet should be ${randomLength}.  remember always include $mfer. next`;
@@ -640,7 +640,7 @@ cron.schedule('30 7 * * *', async () => {
 });
 
 // // Runs every day at 5pm Pacific Time
-cron.schedule('0 2,6,10,14,18,22 * * *', async () => {
+cron.schedule('0 12 * * *', async () => {
   console.log('Running scheduled task to fetch and post the most popular $mfer tweet...');
   await postMostPopularMferTweet();
 });
