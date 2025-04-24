@@ -661,7 +661,7 @@ cron.schedule('5,25,45 * * * *', async () => {
 // Schedule the function to run daily at 12:30 PM Pacific Time
 cron.schedule('50 12 * * *', async () => {
   console.log('Running the daily Nifty Island meme tweet...');
-  await sendDailyNiftyIslandTweet();
+  // await sendDailyNiftyIslandTweet();
 });
 
 // (async () => {
