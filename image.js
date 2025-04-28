@@ -12,7 +12,6 @@ async function generateImage(prompt) {
       n: 1,
       size: "1024x1024",
       model: "gpt-image-1",
-      response_format: "b64_json",
     });
 
     const imageBase64 = imageResponse.data[0].b64_json;
