@@ -11,7 +11,7 @@ async function generateImage(prompt) {
       prompt: prompt,
       n: 1,
       size: "1024x1024",
-      model: "dall-e-3",
+      model: "gpt-image-1",
       response_format: "b64_json",
     });
 
