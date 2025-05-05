@@ -14,6 +14,23 @@ const fs = require('fs');
 const path = require('path');
 const axios = require('axios');
 
+// Global array of style options for image generation
+const styleOptions = [
+  "Photorealistic, lifelike humans",
+  "Simple hand drawn",
+  "studio ghibli style",
+  "N64 graphics",
+  "gameboy graphics",
+  "low effort ms-paint",
+  "Hollywood movie",
+  "black and white, thick hand drawn lines, minimal colors accent the image",
+  "simpsons style",
+  "south park style",
+  "pixel art",
+  "ultra detailed unreal engine 5 3d render",
+  "quick 1-minute hand drawn messy sketch"
+];
+
 // Get your OpenAI Assistant credentials from environment variables
 const { MODEL, TWITTER_ASST_MODEL, OPENAI_API_KEY } = process.env;
 
@@ -148,9 +165,12 @@ async function generateTweetImage(mferId, tweetContent) {
 
   // Extract background color from the traits
   const backgroundColor = description.traits.background || "orange or blue";
+  
+  // Randomly select a style
+  const randomStyle = styleOptions[Math.floor(Math.random() * styleOptions.length)];
 
-  // Initial image prompt based on mfer description, background color, and tweet content
-  const initialPrompt = `Create an image PROMPT for: A stylized depiction with a ${backgroundColor} background of ${description.description}, doing something that matches the content of this tweet: "${tweetContent}". \n\nMake it cool, sketchy, beautiful, stick figure, or realistic based on tweet vibe. Show the character doing a cool/powerful/chill/based/dope activity.  only return the prompt, do not include any extra text or greetings. do NOT use the generate_image function, only return the prompt.`;
+  // Initial image prompt based on mfer description, background color, tweet content, and random style
+  const initialPrompt = `Create an image PROMPT for: A stylized depiction with a ${backgroundColor} background of ${description.description}, doing something that matches the content of this tweet: "${tweetContent}". \n\nUse this art style: ${randomStyle}. Make it cool, sketchy, beautiful, stick figure, or realistic based on tweet vibe. Show the character doing a cool/powerful/chill/based/dope activity.  only return the prompt, do not include any extra text or greetings. do NOT use the generate_image function, only return the prompt.`;
 
   console.log(`Initial image prompt: ${initialPrompt}`);
 
@@ -232,8 +252,11 @@ async function sendDailyGMTweet() {
       return;
     }
 
+    // Randomly select a style
+    const randomStyle = styleOptions[Math.floor(Math.random() * styleOptions.length)];
+
     // Generate the image (robot mfer)
-    const mferImagePrompt = `A robot mfer enjoying a sunny morning, wearing headphones, smoking a cigarette. The background is sunny with yellow beams. The stick figure says 'gmfers' in a cartoon speech bubble. $GMFR.  take inspiration from this tweet: ${tweetContent}`;
+    const mferImagePrompt = `A robot mfer enjoying a sunny morning, wearing headphones, smoking a cigarette. The background is sunny with yellow beams. The stick figure says 'gmfers' in a cartoon speech bubble. $GMFR. Style: ${randomStyle}. Take inspiration from this tweet: ${tweetContent}`;
     const imageUrl = await generateImage(mferImagePrompt);
 
     const localImagePath = path.join(__dirname, 'gm-image.png');
@@ -299,8 +322,11 @@ async function postMostPopularMferTweet() {
       // 2. Generate an image meme for the tweet
       console.log('Generating image meme...');
 
+      // Randomly select a style
+      const randomStyle = styleOptions[Math.floor(Math.random() * styleOptions.length)];
+
       // Prepare the meme prompt using the text from the first cast and embedded cast if available
-      let imagePrompt = `Generate a hilarious meme image-prompt based in the mfer/twitter/x/nft/art/meme universe about the following tweet, give subjects mfer gear like cigs and headphones. Do NOT create an image, ONLY return the text prompt (do not acknowledge me, etc).  You can censor "motherfucker" to help get passed the content filter.  Keep text short, as DALL-E can only handle a little bit of text, several words MAX between speech bubbles and captions.  only include speech and captions if necessary. \n\nMain Tweet: "${text}"`;
+      let imagePrompt = `Generate a hilarious meme image-prompt based in the mfer/twitter/x/nft/art/meme universe about the following tweet, give subjects mfer gear like cigs and headphones. Use this art style: ${randomStyle}. Do NOT create an image, ONLY return the text prompt (do not acknowledge me, etc).  You can censor "motherfucker" to help get passed the content filter.  Keep text short, as DALL-E can only handle a little bit of text, several words MAX between speech bubbles and captions.  only include speech and captions if necessary. \n\nMain Tweet: "${text}"`;
       // if quoteTweetText {
       //   prompt = prompt + `\n\nQuoted tweet: ${quoteTweetText}`
       // }
