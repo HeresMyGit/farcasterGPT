@@ -170,7 +170,7 @@ async function generateTweetImage(mferId, tweetContent) {
   const randomStyle = styleOptions[Math.floor(Math.random() * styleOptions.length)];
 
   // Initial image prompt based on mfer description, background color, tweet content, and random style
-  const initialPrompt = `Create an image PROMPT for: A stylized depiction with a ${backgroundColor} background of ${description.description}, doing something that matches the content of this tweet: "${tweetContent}". \n\nUse this art style: ${randomStyle}. Make it cool, sketchy, beautiful, stick figure, or realistic based on tweet vibe. Show the character doing a cool/powerful/chill/based/dope activity.  only return the prompt, do not include any extra text or greetings. do NOT use the generate_image function, only return the prompt.`;
+  const initialPrompt = `Create an image PROMPT for: A stylized depiction with a ${backgroundColor} background of ${description.description}, doing something that matches the content of this tweet: "${tweetContent}". \n\nUse this art style: ${randomStyle}. Show the character doing a cool/powerful/chill/based/dope activity.  only return the prompt, do not include any extra text or greetings. do NOT use the generate_image function, only return the prompt.`;
 
   console.log(`Initial image prompt: ${initialPrompt}`);
 
