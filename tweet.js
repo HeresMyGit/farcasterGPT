@@ -17,7 +17,7 @@ const axios = require('axios');
 // Global array of style options for image generation
 const styleOptions = [
   "Photorealistic, lifelike humans",
-  "Simple hand drawn",
+  "Simple hand drawn stick figure",
   "studio ghibli style",
   "N64 graphics",
   "gameboy graphics",
@@ -169,8 +169,14 @@ async function generateTweetImage(mferId, tweetContent) {
   // Randomly select a style
   const randomStyle = styleOptions[Math.floor(Math.random() * styleOptions.length)];
 
+  // Replace "simple hand-drawn stick figure" with "human" in the description
+  let modifiedDescription = description.description;
+  if (modifiedDescription) {
+    modifiedDescription = modifiedDescription.replace(/simple hand-drawn stick figure/gi, "human");
+  }
+
   // Initial image prompt based on mfer description, background color, tweet content, and random style
-  const initialPrompt = `Create an image PROMPT for: A stylized depiction with a ${backgroundColor} background of ${description.description}, doing something that matches the content of this tweet: "${tweetContent}". \n\nUse this art style: ${randomStyle}. Show the character doing a cool/powerful/chill/based/dope activity.  only return the prompt, do not include any extra text or greetings. do NOT use the generate_image function, only return the prompt.`;
+  const initialPrompt = `Create an image PROMPT for: A stylized depiction with a ${backgroundColor} background of ${modifiedDescription}, doing something that matches the content of this tweet: "${tweetContent}". \n\nUse this art style: ${randomStyle}. Show the character doing a cool/powerful/chill/based/dope activity.  only return the prompt, do not include any extra text or greetings. do NOT use the generate_image function, only return the prompt.`;
 
   console.log(`Initial image prompt: ${initialPrompt}`);
 
