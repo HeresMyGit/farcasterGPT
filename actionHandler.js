@@ -8,6 +8,9 @@ const { createToken } = require('./zora.js')
 const mintclub = require('./mintClub');
 const degen = require('./degen');
 const personalPrompt = require('./personalPrompt');
+const { getXMTPConversationInfo } = require('./assistant');
+const { getConversationAnalytics } = require('./xmtpUtils');
+const xmtpContext = require('./xmtpContext');
 const axios = require('axios');
 const FormData = require('form-data');
 
@@ -371,6 +374,66 @@ async function handleRequiresAction(run, threadId) {
             tool_call_id: tool.id,
             output: JSON.stringify(result)
           };
+        } else if (tool.function.name === 'getXMTPConversationInfo') {
+          console.log(`Fetching XMTP conversation info...`);
+          const { conversationId } = JSON.parse(tool.function.arguments);
+          
+          try {
+            // Check if we have XMTP context available
+            if (xmtpContext.hasContext()) {
+              const { client, conversation } = xmtpContext.getContext();
+              
+              // Get conversation analytics directly
+              const analytics = await getConversationAnalytics(conversation, client);
+              
+              if (analytics) {
+                const result = {
+                  success: true,
+                  conversationInfo: {
+                    id: analytics.info.conversationId.substring(0, 8) + '...',
+                    type: analytics.info.conversationType,
+                    created: new Date(analytics.info.createdAt).toLocaleDateString(),
+                    messageCount: analytics.info.messageCount,
+                    isActive: analytics.info.isActive,
+                    participants: {
+                      you: analytics.participants.self.inboxId.substring(0, 8) + '...',
+                      peer: analytics.participants.peer.inboxId.substring(0, 8) + '...',
+                      peerDevices: analytics.participants.peer.installations
+                    },
+                    activity: {
+                      conversationAge: analytics.status.conversationAge + ' days',
+                      lastActivity: analytics.status.lastActivity ? new Date(analytics.status.lastActivity).toLocaleString() : 'unknown',
+                      hoursSinceLastActivity: analytics.status.hoursSinceLastActivity + 'h ago'
+                    }
+                  }
+                };
+                
+                return {
+                  tool_call_id: tool.id,
+                  output: JSON.stringify(result),
+                };
+              }
+            }
+            
+            // Fallback if no context
+            const result = {
+              success: false,
+              error: "XMTP context not available. This function works best within XMTP conversations.",
+              hint: "Try asking about conversation details again, or use '/info' command.",
+              conversationId: conversationId
+            };
+            
+            return {
+              tool_call_id: tool.id,
+              output: JSON.stringify(result),
+            };
+          } catch (error) {
+            console.error('Error with XMTP conversation info:', error);
+            return {
+              tool_call_id: tool.id,
+              output: JSON.stringify({ success: false, error: error.message }),
+            };
+          }
         } else {
           console.warn(`No handler for tool: ${tool.function.name}`);
           return {

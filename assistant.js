@@ -19,6 +19,7 @@ const ham = require('./ham');
 const axios = require('axios');
 const FormData = require('form-data');
 const { handleRequiresAction, imageUrlMap } = require('./actionHandler');
+const { getConversationAnalytics } = require('./xmtpUtils');
 
 // In-memory cache to track message hashes the bot has replied to
 const repliedMessageHashes = new Set();
@@ -401,6 +402,153 @@ async function handleWebhook(req, res) {
   }
 }
 
+// Function to get XMTP conversation analytics (can be called by AI)
+async function getXMTPConversationInfo(conversationId, client) {
+  try {
+    console.log(`Getting XMTP conversation info for: ${conversationId}`);
+    
+    const conversation = await client.conversations.getConversationById(conversationId);
+    if (!conversation) {
+      throw new Error('Conversation not found');
+    }
+
+    const analytics = await getConversationAnalytics(conversation, client);
+    
+    if (analytics) {
+      // Return formatted info for the AI
+      return {
+        success: true,
+        conversation: {
+          id: analytics.info.conversationId,
+          type: analytics.info.conversationType,
+          created: analytics.info.createdAt,
+          messageCount: analytics.info.messageCount,
+          participants: analytics.participants,
+          lastActivity: analytics.status.lastActivity,
+          conversationAge: analytics.status.conversationAge,
+          messageStats: analytics.messageHistory?.stats
+        }
+      };
+    }
+    
+    throw new Error('Could not retrieve conversation analytics');
+  } catch (error) {
+    console.error('Error getting XMTP conversation info:', error);
+    return {
+      success: false,
+      error: error.message
+    };
+  }
+}
+
+// Function specifically for processing XMTP messages
+async function processXMTPMessage(messageContent, senderInfo, conversationId = null, client = null) {
+  try {
+    console.log(`Processing XMTP message: "${messageContent}" from ${senderInfo.username || senderInfo.fid}`);
+
+    // Create a thread for this conversation (using sender's fid as thread identifier)
+    const xmtpThreadId = `xmtp_${senderInfo.fid}`;
+    let threadId = getOpenAIThreadId(xmtpThreadId);
+
+    if (!threadId) {
+      // No existing OpenAI thread, create a new one
+      threadId = await createNewThread(`XMTP Chat with ${senderInfo.username || senderInfo.fid}`);
+      
+      // Save the new mapping
+      saveOpenAIThreadId(xmtpThreadId, threadId);
+      console.log(`Created new thread ${threadId} for XMTP conversation ${xmtpThreadId}`);
+    } else {
+      console.log(`Using existing OpenAI thread ID: ${threadId} for XMTP conversation: ${xmtpThreadId}`);
+    }
+
+    // Retrieve the personal prompt for the sender, if available
+    const personalPromptText = personalPrompt.getPersonalPrompt(senderInfo.fid) || null;
+
+    // Create a machine-friendly user message using JSON to send data
+    let userMessageObject = {
+      instructions: [
+        "This is a message from XMTP (a decentralized messaging protocol).",
+        "Look up this thread to get context from previous messages.",
+        "Respond naturally as if you were in a direct message conversation.",
+        "If the user asks for conversation info or analytics, you can use the getXMTPConversationInfo function.",
+        `Respond to the message from ${senderInfo.username || senderInfo.fid}.`
+      ],
+      data: {
+        messageContent: messageContent,
+        senderUsername: senderInfo.username,
+        senderFID: senderInfo.fid,
+        platform: "XMTP",
+        conversationId: conversationId,
+        timestamp: new Date().toISOString()
+      }
+    };
+
+    // Include personalPrompt in the data if it's available
+    if (personalPromptText) {
+      userMessageObject.data.personalPrompt = personalPromptText;
+    }
+
+    let userMessage = JSON.stringify(userMessageObject, null, 2);
+
+    await createMessage(threadId, userMessage);
+
+    // Run the Assistant on the thread (use XMTP_MODEL if available, otherwise fall back to ASST_MODEL)
+    let botMessage = 'Sorry, I couldn\'t complete the request at this time.';
+    const assistantModel = process.env.XMTP_MODEL ;
+    const run = await runThread(threadId, assistantModel);
+    
+    console.log(`Using assistant model: ${assistantModel} for XMTP message`);
+
+    if (!run || !run.status) {
+      console.error('Run object is undefined or missing a status property.');
+      throw new Error('OpenAI run failed');
+    }
+
+    // Check if the run has completed successfully
+    if (run.status === 'completed') {
+      const messages = await openai.beta.threads.messages.list(run.thread_id);
+
+      if (messages && messages.data && messages.data.length > 0) {
+        const assistantMessages = messages.data.filter(msg => msg.role === 'assistant');
+        if (assistantMessages.length > 0) {
+          botMessage = assistantMessages[0].content[0].text.value;
+          console.log(`Generated XMTP response using threadID ${threadId}`);
+        } else {
+          console.error('No assistant messages found.');
+          throw new Error('No assistant response generated');
+        }
+      } else {
+        console.error('No messages found in the thread.');
+        throw new Error('No messages in thread');
+      }
+    } else if (run.status === 'requires_action') {
+      // Handle function calls if needed
+      const updatedRun = await handleRequiresAction(run, threadId);
+      
+      if (updatedRun && updatedRun.status === 'completed') {
+        const messages = await openai.beta.threads.messages.list(updatedRun.thread_id);
+        
+        if (messages && messages.data && messages.data.length > 0) {
+          const assistantMessages = messages.data.filter(msg => msg.role === 'assistant');
+          if (assistantMessages.length > 0) {
+            botMessage = assistantMessages[0].content[0].text.value;
+            console.log(`Generated XMTP response with actions using threadID ${threadId}`);
+          }
+        }
+      }
+    } else {
+      console.error(`Run did not complete successfully. Status: ${run.status}`);
+      throw new Error(`OpenAI run failed with status: ${run.status}`);
+    }
+
+    return botMessage;
+
+  } catch (error) {
+    console.error('Error processing XMTP message:', error);
+    return 'Sorry, I encountered an error processing your message. Please try again.';
+  }
+}
+
 // Helper function to split the message into chunks of a specified size
 function splitMessageIntoChunks(message, maxChunkSize) {
   const chunks = [];
@@ -468,4 +616,6 @@ module.exports = {
   generateImage,
   handleWebhook,
   splitMessageIntoChunks,
+  processXMTPMessage,
+  getXMTPConversationInfo,
 };
