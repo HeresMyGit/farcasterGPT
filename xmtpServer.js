@@ -471,8 +471,10 @@ class XMTPServer {
     // Prepare mention patterns based on actual bot identifiers
     const mentionPatterns = [];
     
-    // 1. @mferGPT
-    mentionPatterns.push('@mfergpt');
+         // 1. @mferGPT and ENS domains
+     mentionPatterns.push('@mfergpt');
+     mentionPatterns.push('@mfergpt.base.eth');
+     mentionPatterns.push('@mfergpt.eth');
     
     // 2. Wallet address patterns (if available)
     if (botAddress) {
