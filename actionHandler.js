@@ -518,13 +518,69 @@ async function handleRequiresAction(run, threadId) {
               };
             }
             
+            // Extract unique sender inbox IDs and resolve to usernames
+            const uniqueSenderIds = [...new Set(messages.map(m => m.senderInboxId))];
+            console.log(`Resolving ${uniqueSenderIds.length} unique participants for summary...`);
+            
+            // Resolve inbox IDs to wallet addresses
+            const senderMapping = {};
+            
+            try {
+              // Get inbox states for all unique senders
+              const inboxStates = await client.preferences.inboxStateFromInboxIds(uniqueSenderIds);
+              
+              // Extract wallet addresses
+              const walletAddresses = [];
+              const inboxToWallet = {};
+              
+              inboxStates.forEach((state, index) => {
+                const inboxId = uniqueSenderIds[index];
+                const walletAddr = state?.identifiers?.[0]?.identifier;
+                if (walletAddr) {
+                  walletAddresses.push(walletAddr);
+                  inboxToWallet[inboxId] = walletAddr;
+                }
+              });
+              
+              // Look up Farcaster usernames for wallet addresses
+              if (walletAddresses.length > 0) {
+                console.log(`Looking up Farcaster usernames for ${walletAddresses.length} wallet addresses...`);
+                const usernames = await lookupFarcasterUsernames(walletAddresses);
+                
+                // Create final mapping: inbox ID → display name
+                uniqueSenderIds.forEach(inboxId => {
+                  const walletAddr = inboxToWallet[inboxId];
+                  if (walletAddr) {
+                    const username = usernames[walletAddr.toLowerCase()];
+                    senderMapping[inboxId] = username ? `@${username}` : `${walletAddr.slice(0, 6)}...${walletAddr.slice(-4)}`;
+                  } else {
+                    senderMapping[inboxId] = `${inboxId.slice(0, 6)}`;
+                  }
+                });
+              } else {
+                // Fallback: use truncated inbox IDs
+                uniqueSenderIds.forEach(inboxId => {
+                  senderMapping[inboxId] = `${inboxId.slice(0, 6)}`;
+                });
+              }
+              
+              console.log(`Resolved participants:`, Object.entries(senderMapping).map(([id, name]) => `${id.slice(0, 6)}...→${name}`));
+              
+            } catch (resolutionError) {
+              console.warn('Error resolving participants, using fallback names:', resolutionError.message);
+              // Fallback: use truncated inbox IDs
+              uniqueSenderIds.forEach(inboxId => {
+                senderMapping[inboxId] = `${inboxId.slice(0, 6)}`;
+              });
+            }
+            
             // Format messages for summarization (newest first, so reverse to get chronological order)
             const history = messages
               .reverse() // Convert to oldest → newest
-              .map((m) => `${m.senderInboxId.slice(0, 6)}: ${m.content}`)
+              .map((m) => `${senderMapping[m.senderInboxId] || m.senderInboxId.slice(0, 6)}: ${m.content}`)
               .join('\n');
             
-            console.log(`Creating summary from ${messages.length} messages...`);
+            console.log(`Creating summary from ${messages.length} messages with resolved participants...`);
             
             // Use OpenAI chat completions to generate summary
             const summaryResp = await openai.chat.completions.create({
