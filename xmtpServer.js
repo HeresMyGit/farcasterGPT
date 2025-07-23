@@ -8,6 +8,7 @@ const { getConversationAnalytics } = require('./xmtpUtils');
 const xmtpContext = require('./xmtpContext');
 const { getOpenAIThreadId, saveOpenAIThreadId } = require('./threadUtils');
 const { createNewThread, createMessage } = require('./assistant');
+const { resolveDisplayName } = require('./nameResolver.cjs');
 
 class XMTPServer {
   constructor() {
@@ -119,7 +120,8 @@ class XMTPServer {
       }
 
       // Log the message type and content for debugging
-      console.log(`📨 Received XMTP message (${message.contentType?.typeId || 'unknown'}): "${message.content}" from ${message.senderInboxId}`);
+      const shortInboxId = message.senderInboxId.substring(0, 8);
+      console.log(`📨 Received XMTP message (${message.contentType?.typeId || 'unknown'}): "${message.content}" from ${shortInboxId}...`);
       
       // For reply messages, also log the fallback and structure for debugging
       if (message.contentType?.typeId === 'reply') {
@@ -149,9 +151,13 @@ class XMTPServer {
         // Still add the message to OpenAI thread for context, but don't run it
         try {
           const extractedContent = this.extractMessageContent(message);
+          
+          // Get readable name for context messages too
+          const displayName = await this.displayNameFor(message.senderInboxId, this.client);
+          
           const senderInfo = {
-            username: message.senderInboxId.substring(0, 8),
-            fid: message.senderInboxId,
+            username: displayName, // Use resolved name
+            fid: message.senderInboxId, // Keep full inbox ID
           };
           
           // Add to thread without running for future context
@@ -167,38 +173,25 @@ class XMTPServer {
       // Set XMTP context for this conversation so the action handler can access it
       xmtpContext.setContext(this.client, conversation, message.conversationId);
 
-      // Get conversation analytics if requested
-      const messageText = message.content || message.fallback || '';
-      if (messageText.toLowerCase().includes('/info') || 
-          messageText.toLowerCase().includes('/conversation')) {
-        try {
-          console.log('📊 Getting conversation analytics...');
-          const analytics = await getConversationAnalytics(conversation, this.client);
-          
-          if (analytics) {
-            const report = this.formatConversationReport(analytics);
-            await conversation.send(report);
-            console.log('✅ Sent conversation analytics');
-            return;
-          }
-        } catch (analyticsError) {
-          console.error('❌ Error getting conversation analytics:', analyticsError);
-        }
-      }
+
 
       // Extract the actual message content for the assistant
       const extractedContent = this.extractMessageContent(message);
 
+      // Get readable name for the sender
+      const displayName = await this.displayNameFor(message.senderInboxId, this.client);
+
       // Create sender info object for the assistant
       const senderInfo = {
-        username: message.senderInboxId.substring(0, 8), // Use first 8 chars of inbox ID as username
-        fid: message.senderInboxId, // Use full inbox ID as fid
+        username: displayName, // Use resolved name instead of raw inbox ID
+        fid: message.senderInboxId, // Keep full inbox ID as fid for tracking
       };
 
       // Use the existing assistant functionality
       let response;
       try {
         response = await processXMTPMessage(extractedContent, senderInfo, conversation.id, this.client);
+        console.log(`✅ Generated response for ${senderInfo.username}`);
       } catch (assistantError) {
         console.error('⚠️ Error using assistant, falling back to basic OpenAI:', assistantError);
         
@@ -609,18 +602,18 @@ class XMTPServer {
    */
   async addMessageToThread(messageContent, senderInfo, conversationId) {
     try {
-      // Create a thread for this conversation (using sender's fid as thread identifier)
-      const xmtpThreadId = `xmtp_${senderInfo.fid}`;
-      let threadId = getOpenAIThreadId(xmtpThreadId);
+             // Create a thread for this conversation (using sender's fid as thread identifier)
+       const xmtpThreadId = `xmtp_${senderInfo.fid}`;
+       let threadId = getOpenAIThreadId(xmtpThreadId);
 
-      if (!threadId) {
-        // No existing OpenAI thread, create a new one
-        threadId = await createNewThread(`XMTP Chat with ${senderInfo.username || senderInfo.fid}`);
-        
-        // Save the new mapping
-        saveOpenAIThreadId(xmtpThreadId, threadId);
-        console.log(`Created new thread ${threadId} for XMTP conversation ${xmtpThreadId}`);
-      }
+       if (!threadId) {
+         // No existing OpenAI thread, create a new one
+         threadId = await createNewThread(`XMTP Chat with ${senderInfo.username}`);
+         
+         // Save the new mapping
+         saveOpenAIThreadId(xmtpThreadId, threadId);
+         console.log(`Created new thread ${threadId} for XMTP conversation ${xmtpThreadId}`);
+       }
 
       // Create a context message object (similar to processXMTPMessage but simpler)
       let contextMessageObject = {
@@ -693,6 +686,48 @@ class XMTPServer {
     } catch (error) {
       console.error('Error extracting message content:', error);
       return message.content || message.fallback || 'Error reading message';
+    }
+  }
+
+  /**
+   * Get a readable display name for an inbox ID
+   * @param {string} peerInboxId - The inbox ID to resolve
+   * @param {Object} client - XMTP client
+   * @param {Object} provider - Ethers provider for ENS lookup
+   * @returns {Promise<string>} Readable name or fallback
+   */
+    /**
+   * Resolve a human-readable name for an inbox ID using the new bulletproof name resolver
+   * @param {string} peerInboxId - The inbox ID to resolve
+   * @param {Object} client - XMTP client
+   * @returns {Promise<string>} Readable name (Basename, ENS, cb.id, Lens, etc.) or fallback
+   */
+  async displayNameFor(peerInboxId, client) {
+    try {
+      console.log(`🔍 Resolving name for inbox ID: ${peerInboxId.slice(0, 8)}...`);
+      
+      // Step 1: inboxId → wallet address
+      const [state] = await client.preferences.inboxStateFromInboxIds([peerInboxId]);
+      const addr = state?.identifiers?.[0]?.identifier;
+      
+      if (!addr) {
+        console.log(`⚠️ No wallet address found for inbox ID ${peerInboxId.slice(0, 8)}`);
+        return peerInboxId.slice(0, 8);
+      }
+      
+      console.log(`🔍 Found wallet address: ${addr}`);
+      
+      // Step 2: wallet → human-readable name using bulletproof resolver
+      console.log(`🔍 Looking up name via bulletproof resolver...`);
+      const displayName = await resolveDisplayName(addr);
+      
+      console.log(`✅ Resolved name: ${displayName}`);
+      return displayName;
+      
+    } catch (error) {
+      console.log(`⚠️ Error in displayNameFor:`, error.message);
+      // Ultimate fallback - truncated inbox ID
+      return peerInboxId.slice(0, 6);
     }
   }
 

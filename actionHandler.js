@@ -434,6 +434,77 @@ async function handleRequiresAction(run, threadId) {
               output: JSON.stringify({ success: false, error: error.message }),
             };
           }
+        } else if (tool.function.name === 'get_conversation_summary') {
+          console.log(`Generating conversation summary...`);
+          const { conversationId, maxMessages = 100 } = JSON.parse(tool.function.arguments);
+          
+          try {
+            // Check if we have XMTP context available
+            if (!xmtpContext.hasContext()) {
+              throw new Error("XMTP context not available. This function works within XMTP conversations only.");
+            }
+            
+            const { client, conversation } = xmtpContext.getContext();
+            
+            // Get the conversation by ID to ensure we have the right one
+            const convo = await client.conversations.getConversationById(conversationId);
+            if (!convo) {
+              throw new Error(`Conversation ${conversationId} not found`);
+            }
+            
+            // Get recent messages (note: XMTP returns messages in reverse chronological order)
+            console.log(`Fetching ${maxMessages} recent messages for summary...`);
+            const messages = await convo.messages(maxMessages);
+            
+            if (!messages || messages.length === 0) {
+              const emptyMsg = "No messages found in this conversation to summarize.";
+              await convo.send(emptyMsg);
+              return {
+                tool_call_id: tool.id,
+                output: JSON.stringify({ summary: emptyMsg })
+              };
+            }
+            
+            // Format messages for summarization (newest first, so reverse to get chronological order)
+            const history = messages
+              .reverse() // Convert to oldest → newest
+              .map((m) => `${m.senderInboxId.slice(0, 6)}: ${m.content}`)
+              .join('\n');
+            
+            console.log(`Creating summary from ${messages.length} messages...`);
+            
+            // Use OpenAI chat completions to generate summary
+            const summaryResp = await openai.chat.completions.create({
+              model: "gpt-4o-mini",
+              messages: [
+                {
+                  role: "system",
+                  content: "Create a comprehensive and detailed summary of this chat conversation. Include key topics discussed, important points raised by each participant, any decisions made, questions asked, and the overall flow of the conversation. Break it down into sections if there are multiple topics. Keep names concise (first nickname you see) but provide rich detail about the content and context of the discussion."
+                },
+                { 
+                  role: "user", 
+                  content: history 
+                }
+              ],
+            });
+
+            const summary = summaryResp.choices[0].message.content;
+            
+            console.log(`Generated conversation summary from ${messages.length} messages`);
+
+            // Return the summary to fulfill the tool call - let the assistant handle sending it
+            return {
+              tool_call_id: tool.id,
+              output: summary  // Return summary directly, not as JSON
+            };
+            
+          } catch (error) {
+            console.error('Error generating conversation summary:', error);
+            return {
+              tool_call_id: tool.id,
+              output: JSON.stringify({ success: false, error: error.message }),
+            };
+          }
         } else {
           console.warn(`No handler for tool: ${tool.function.name}`);
           return {

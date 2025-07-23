@@ -19,7 +19,6 @@ const ham = require('./ham');
 const axios = require('axios');
 const FormData = require('form-data');
 const { handleRequiresAction, imageUrlMap } = require('./actionHandler');
-const { getConversationAnalytics } = require('./xmtpUtils');
 
 // In-memory cache to track message hashes the bot has replied to
 const repliedMessageHashes = new Set();
@@ -402,6 +401,64 @@ async function handleWebhook(req, res) {
   }
 }
 
+// Helper function to split the message into chunks of a specified size
+function splitMessageIntoChunks(message, maxChunkSize) {
+  const chunks = [];
+  for (let i = 0; i < message.length; i += maxChunkSize) {
+    chunks.push(message.slice(i, i + maxChunkSize));
+  }
+  return chunks;
+}
+
+function replaceMultipliersAndCountHam(maxHam, text) {
+  // Replace x25 or x 25 where 25 is the maxHam, and wrap it in [brackets]
+  text = text.replace(/\bx\s*(\d+)/g, (match, p1) => {
+    return parseInt(p1) > maxHam ? `[x${p1}]` : match;
+  });
+
+  // Count the total instances of 🍖
+  let hamCount = 0;
+
+  // Replace extra 🍖 emojis with [HAM]
+  text = text.replace(/🍖/g, () => {
+    hamCount++;
+    return hamCount > maxHam ? '[HAM]' : '🍖';
+  });
+
+  // Replace patterns like "69 $DEGEN" with "69 [DEGEN]"
+  text = text.replace(/(\d+)\s?\$([A-Za-z]+)/g, (match, num, ticker) => {
+    console.log(`Adjusting pattern "${match}" to "${num} [${ticker}]".`);
+    return `${num} [${ticker}]`;
+  });
+
+  return text;
+}
+
+function addHamTip(inputString, multiplier = 15) {
+    // Regular expression to find the rating in the format RATE:number/5 without brackets for the match,
+    // but still replace the entire thing if surrounded by brackets
+    const ratingRegex = /\[.*RATE:(\d)\/5.*\]/;
+
+    // Search for the rating in the input string
+    const match = inputString.match(ratingRegex);
+
+    if (match) {
+        // Extract the rating number
+        const rating = parseInt(match[1], 10);
+
+        // Calculate the tip amount
+        const tipAmount = rating * multiplier;
+
+        // Replace the whole part surrounded by brackets with the ham tip
+        const outputString = inputString.replace(ratingRegex, `\n\n🍖 x${tipAmount}`);
+
+        return outputString;
+    } else {
+        // If no rating is found, return the original string
+        return inputString;
+    }
+}
+
 // Function to get XMTP conversation analytics (can be called by AI)
 async function getXMTPConversationInfo(conversationId, client) {
   try {
@@ -412,6 +469,7 @@ async function getXMTPConversationInfo(conversationId, client) {
       throw new Error('Conversation not found');
     }
 
+    const { getConversationAnalytics } = require('./xmtpUtils');
     const analytics = await getConversationAnalytics(conversation, client);
     
     if (analytics) {
@@ -494,7 +552,7 @@ async function processXMTPMessage(messageContent, senderInfo, conversationId = n
 
     // Run the Assistant on the thread (use XMTP_MODEL if available, otherwise fall back to ASST_MODEL)
     let botMessage = 'Sorry, I couldn\'t complete the request at this time.';
-    const assistantModel = process.env.XMTP_MODEL ;
+    const assistantModel = process.env.XMTP_MODEL || process.env.ASST_MODEL;
     const run = await runThread(threadId, assistantModel);
     
     console.log(`Using assistant model: ${assistantModel} for XMTP message`);
@@ -547,64 +605,6 @@ async function processXMTPMessage(messageContent, senderInfo, conversationId = n
     console.error('Error processing XMTP message:', error);
     return 'Sorry, I encountered an error processing your message. Please try again.';
   }
-}
-
-// Helper function to split the message into chunks of a specified size
-function splitMessageIntoChunks(message, maxChunkSize) {
-  const chunks = [];
-  for (let i = 0; i < message.length; i += maxChunkSize) {
-    chunks.push(message.slice(i, i + maxChunkSize));
-  }
-  return chunks;
-}
-
-function replaceMultipliersAndCountHam(maxHam, text) {
-  // Replace x25 or x 25 where 25 is the maxHam, and wrap it in [brackets]
-  text = text.replace(/\bx\s*(\d+)/g, (match, p1) => {
-    return parseInt(p1) > maxHam ? `[x${p1}]` : match;
-  });
-
-  // Count the total instances of 🍖
-  let hamCount = 0;
-
-  // Replace extra 🍖 emojis with [HAM]
-  text = text.replace(/🍖/g, () => {
-    hamCount++;
-    return hamCount > maxHam ? '[HAM]' : '🍖';
-  });
-
-  // Replace patterns like "69 $DEGEN" with "69 [DEGEN]"
-  text = text.replace(/(\d+)\s?\$([A-Za-z]+)/g, (match, num, ticker) => {
-    console.log(`Adjusting pattern "${match}" to "${num} [${ticker}]".`);
-    return `${num} [${ticker}]`;
-  });
-
-  return text;
-}
-
-function addHamTip(inputString, multiplier = 15) {
-    // Regular expression to find the rating in the format RATE:number/5 without brackets for the match,
-    // but still replace the entire thing if surrounded by brackets
-    const ratingRegex = /\[.*RATE:(\d)\/5.*\]/;
-
-    // Search for the rating in the input string
-    const match = inputString.match(ratingRegex);
-
-    if (match) {
-        // Extract the rating number
-        const rating = parseInt(match[1], 10);
-
-        // Calculate the tip amount
-        const tipAmount = rating * multiplier;
-
-        // Replace the whole part surrounded by brackets with the ham tip
-        const outputString = inputString.replace(ratingRegex, `\n\n🍖 x${tipAmount}`);
-
-        return outputString;
-    } else {
-        // If no rating is found, return the original string
-        return inputString;
-    }
 }
 
 // Update exports to include the functions needed by niftyHandler
