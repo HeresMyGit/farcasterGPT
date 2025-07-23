@@ -131,6 +131,9 @@ dist
 xmtp-production-*
 xmtp-dev-*
 
+# XMTP username cache
+xmtp_username_cache.json
+
 # Data directory
 .data/
 ../farcasterGPT-Data/

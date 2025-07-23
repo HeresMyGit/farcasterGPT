@@ -529,17 +529,24 @@ async function processXMTPMessage(messageContent, senderInfo, conversationId = n
         "Look up this thread to get context from previous messages.",
         "Respond naturally as if you were in a direct message conversation.",
         "If the user asks for conversation info or analytics, you can use the getXMTPConversationInfo function.",
-        `Respond to the message from ${senderInfo.username || senderInfo.fid}.`
+        `Respond to the message from ${senderInfo.username || senderInfo.fid}.`,
+        `IMPORTANT: The sender's name is ${senderInfo.username}. Always use this name when referring to them.`
       ],
       data: {
         messageContent: messageContent,
         senderUsername: senderInfo.username,
+        senderDisplayName: senderInfo.username, // Add explicit display name field
         senderFID: senderInfo.fid,
         platform: "XMTP",
         conversationId: conversationId,
         timestamp: new Date().toISOString()
       }
     };
+    
+    // Debug: Log what's being sent to AI
+    console.log(`🤖 Sending to AI: sender="${senderInfo.username}", fid="${senderInfo.fid.slice(0, 8)}..."`);
+    console.log(`🤖 AI Instructions include: "Respond to the message from ${senderInfo.username || senderInfo.fid}"`);
+    console.log(`🤖 AI Data includes: senderUsername="${senderInfo.username}"`);;
 
     // Include personalPrompt in the data if it's available
     if (personalPromptText) {

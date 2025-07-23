@@ -9,7 +9,7 @@ const mintclub = require('./mintClub');
 const degen = require('./degen');
 const personalPrompt = require('./personalPrompt');
 const { getXMTPConversationInfo } = require('./assistant');
-const { getConversationAnalytics } = require('./xmtpUtils');
+const { getConversationAnalytics, lookupFarcasterUsernames } = require('./xmtpUtils');
 const xmtpContext = require('./xmtpContext');
 const axios = require('axios');
 const FormData = require('form-data');
@@ -390,20 +390,26 @@ async function handleRequiresAction(run, threadId) {
                 const result = {
                   success: true,
                   conversationInfo: {
-                    id: analytics.info.conversationId.substring(0, 8) + '...',
+                    id: analytics.info.conversationId ? 
+                        analytics.info.conversationId.substring(0, 8) + '...' : 'unknown',
                     type: analytics.info.conversationType,
                     created: new Date(analytics.info.createdAt).toLocaleDateString(),
                     messageCount: analytics.info.messageCount,
                     isActive: analytics.info.isActive,
                     participants: {
-                      you: analytics.participants.self.inboxId.substring(0, 8) + '...',
-                      peer: analytics.participants.peer.inboxId.substring(0, 8) + '...',
+                      you: analytics.participants.self.inboxId ? 
+                           analytics.participants.self.inboxId.substring(0, 8) + '...' : 'unknown',
+                      peer: analytics.participants.peer.inboxId ? 
+                            analytics.participants.peer.inboxId.substring(0, 8) + '...' : 'unknown',
                       peerDevices: analytics.participants.peer.installations
                     },
                     activity: {
-                      conversationAge: analytics.status.conversationAge + ' days',
-                      lastActivity: analytics.status.lastActivity ? new Date(analytics.status.lastActivity).toLocaleString() : 'unknown',
-                      hoursSinceLastActivity: analytics.status.hoursSinceLastActivity + 'h ago'
+                      conversationAge: analytics.status.conversationAge !== null ? 
+                                      analytics.status.conversationAge + ' days' : 'unknown',
+                      lastActivity: analytics.status.lastActivity ? 
+                                   new Date(analytics.status.lastActivity).toLocaleString() : 'unknown',
+                      hoursSinceLastActivity: analytics.status.hoursSinceLastActivity !== undefined ? 
+                                             analytics.status.hoursSinceLastActivity + 'h ago' : 'unknown'
                     }
                   }
                 };
@@ -432,6 +438,53 @@ async function handleRequiresAction(run, threadId) {
             return {
               tool_call_id: tool.id,
               output: JSON.stringify({ success: false, error: error.message }),
+            };
+          }
+        } else if (tool.function.name === 'look_up_xmtp_user_by_address') {
+          console.log(`Looking up XMTP user by wallet address...`);
+          
+          try {
+            const { walletAddress } = JSON.parse(tool.function.arguments);
+            
+            if (!walletAddress) {
+              throw new Error('Wallet address is required');
+            }
+            
+            console.log(`🔍 Looking up user for address: ${walletAddress}`);
+            
+            // Use our existing lookup function
+            const usernames = await lookupFarcasterUsernames([walletAddress]);
+            const normalizedAddress = walletAddress.toLowerCase();
+            const username = usernames[normalizedAddress];
+            
+            const result = {
+              success: true,
+              walletAddress: walletAddress,
+              farcasterUsername: username || null,
+              displayName: username ? `@${username}` : null,
+              found: !!username,
+              lookupMethod: username ? 'neynar_bulk_api' : 'not_found'
+            };
+            
+            if (username) {
+              console.log(`✅ Found user: ${walletAddress} → @${username}`);
+            } else {
+              console.log(`❌ No Farcaster username found for: ${walletAddress}`);
+            }
+            
+            return {
+              tool_call_id: tool.id,
+              output: JSON.stringify(result),
+            };
+          } catch (error) {
+            console.error('Error looking up XMTP user by address:', error);
+            return {
+              tool_call_id: tool.id,
+              output: JSON.stringify({ 
+                success: false, 
+                error: error.message,
+                walletAddress: tool.function.arguments ? JSON.parse(tool.function.arguments).walletAddress : 'unknown'
+              }),
             };
           }
         } else if (tool.function.name === 'get_conversation_summary') {

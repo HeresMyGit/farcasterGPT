@@ -4,7 +4,7 @@ const { Client } = require('@xmtp/node-sdk');
 const { createSigner, getEncryptionKeyFromHex, logAgentDetails, validateEnvironment } = require('./xmtpHelpers');
 const { openai } = require('./client');
 const { processXMTPMessage } = require('./assistant');
-const { getConversationAnalytics } = require('./xmtpUtils');
+const { getConversationAnalytics, resolveXMTPDisplayName, cleanupExpiredCache } = require('./xmtpUtils');
 const xmtpContext = require('./xmtpContext');
 const { getOpenAIThreadId, saveOpenAIThreadId } = require('./threadUtils');
 const { createNewThread, createMessage } = require('./assistant');
@@ -71,6 +71,9 @@ class XMTPServer {
     try {
       console.log('🔄 Syncing conversations...');
       await this.client.conversations.sync();
+
+      console.log('🧹 Cleaning up expired username cache...');
+      cleanupExpiredCache();
 
       console.log('👂 Starting XMTP message listener...');
       this.isRunning = true;
@@ -152,8 +155,8 @@ class XMTPServer {
         try {
           const extractedContent = this.extractMessageContent(message);
           
-          // Get readable name for context messages too
-          const displayName = await this.displayNameFor(message.senderInboxId, this.client);
+          // Get readable name for context messages too using XMTP-specific resolver
+          const displayName = await resolveXMTPDisplayName(message.senderInboxId, this.client);
           
           const senderInfo = {
             username: displayName, // Use resolved name
@@ -178,8 +181,8 @@ class XMTPServer {
       // Extract the actual message content for the assistant
       const extractedContent = this.extractMessageContent(message);
 
-      // Get readable name for the sender
-      const displayName = await this.displayNameFor(message.senderInboxId, this.client);
+      // Get readable name for the sender using XMTP-specific resolver
+      const displayName = await resolveXMTPDisplayName(message.senderInboxId, this.client);
 
       // Create sender info object for the assistant
       const senderInfo = {
