@@ -170,6 +170,8 @@ class XMTPServer {
           console.error('⚠️ Error adding context message to thread:', contextError);
         }
         
+        // Clear context for early return
+        xmtpContext.clearContext();
         return;
       }
 
@@ -215,6 +217,9 @@ class XMTPServer {
       await conversation.send(response);
       
       console.log('✅ XMTP response sent successfully');
+      
+      // Clear XMTP context after message processing is completely done
+      xmtpContext.clearContext();
 
     } catch (error) {
       console.error('❌ Error handling XMTP message:', error);
@@ -229,8 +234,8 @@ class XMTPServer {
       } catch (sendError) {
         console.error('❌ Error sending error message:', sendError);
       }
-    } finally {
-      // Clear XMTP context after handling the message
+      
+      // Clear XMTP context after error handling
       xmtpContext.clearContext();
     }
   }
