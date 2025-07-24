@@ -4,7 +4,7 @@ const { Client } = require('@xmtp/node-sdk');
 const { createSigner, getEncryptionKeyFromHex, logAgentDetails, validateEnvironment } = require('./xmtpHelpers');
 const { openai } = require('./client');
 const { processXMTPMessage } = require('./assistant');
-const { getConversationAnalytics, resolveXMTPDisplayName, cleanupExpiredCache } = require('./xmtpUtils');
+const { getConversationAnalytics, resolveXMTPDisplayName, cleanupExpiredCache, replaceKnownAddresses } = require('./xmtpUtils');
 const xmtpContext = require('./xmtpContext');
 const { getOpenAIThreadId, saveOpenAIThreadId } = require('./threadUtils');
 const { createNewThread, createMessage } = require('./assistant');
@@ -145,6 +145,11 @@ class XMTPServer {
         return;
       }
 
+      // Set XMTP context for this conversation so the action handler can access it
+      // Do this EARLY so it's available throughout the entire processing flow
+      console.log(`🔗 Setting XMTP context for conversation: ${message.conversationId.slice(0, 8)}...`);
+      xmtpContext.setContext(this.client, conversation, message.conversationId);
+
       // Check if we should respond to this message (now that conversation is available)
       const shouldRespond = await this.shouldRespondToMessage(conversation, message);
       
@@ -171,12 +176,10 @@ class XMTPServer {
         }
         
         // Clear context for early return
+        console.log(`🔗 Clearing XMTP context for early return (not addressed to bot)`);
         xmtpContext.clearContext();
         return;
       }
-
-      // Set XMTP context for this conversation so the action handler can access it
-      xmtpContext.setContext(this.client, conversation, message.conversationId);
 
 
 
@@ -213,12 +216,16 @@ class XMTPServer {
 
       console.log(`🤖 Sending XMTP response: "${response}"`);
       
+      // Replace known wallet addresses with usernames before sending
+      const processedResponse = replaceKnownAddresses(response);
+      
       // Send the AI response to the conversation
-      await conversation.send(response);
+      await conversation.send(processedResponse);
       
       console.log('✅ XMTP response sent successfully');
       
       // Clear XMTP context after message processing is completely done
+      console.log(`🔗 Clearing XMTP context after successful processing`);
       xmtpContext.clearContext();
 
     } catch (error) {
@@ -229,13 +236,16 @@ class XMTPServer {
           message.conversationId,
         );
         if (conversation) {
-          await conversation.send('Sorry, I encountered an error processing your message.');
+          const errorMessage = 'Sorry, I encountered an error processing your message.';
+          const processedErrorMessage = replaceKnownAddresses(errorMessage);
+          await conversation.send(processedErrorMessage);
         }
       } catch (sendError) {
         console.error('❌ Error sending error message:', sendError);
       }
       
       // Clear XMTP context after error handling
+      console.log(`🔗 Clearing XMTP context after error handling`);
       xmtpContext.clearContext();
     }
   }

@@ -9,7 +9,7 @@ const mintclub = require('./mintClub');
 const degen = require('./degen');
 const personalPrompt = require('./personalPrompt');
 const { getXMTPConversationInfo } = require('./assistant');
-const { getConversationAnalytics, lookupFarcasterUsernames } = require('./xmtpUtils');
+const { getConversationAnalytics, lookupFarcasterUsernames, replaceKnownAddresses } = require('./xmtpUtils');
 const xmtpContext = require('./xmtpContext');
 const axios = require('axios');
 const FormData = require('form-data');
@@ -378,9 +378,20 @@ async function handleRequiresAction(run, threadId) {
           console.log(`Fetching XMTP conversation info...`);
           const { conversationId } = JSON.parse(tool.function.arguments);
           
-          try {
-            // Check if we have XMTP context available
-            if (xmtpContext.hasContext()) {
+          // Retry logic for context availability
+          const maxRetries = 3;
+          let attempt = 0;
+          
+          while (attempt < maxRetries) {
+            try {
+              attempt++;
+              console.log(`🔍 Checking XMTP context availability (attempt ${attempt}/${maxRetries})...`);
+              
+              // Check if we have XMTP context available
+              if (xmtpContext.hasContext()) {
+              console.log(`✅ XMTP context is available for conversation summary`);
+              const contextInfo = xmtpContext.getContext();
+              console.log(`🔗 Context details: conversationId=${contextInfo.conversationId?.slice(0, 8)}...`);
               const { client, conversation } = xmtpContext.getContext();
               
               // Get conversation analytics directly
@@ -419,27 +430,48 @@ async function handleRequiresAction(run, threadId) {
                   output: JSON.stringify(result),
                 };
               }
+            } else {
+              // No context available, check if we should retry
+              if (attempt < maxRetries) {
+                console.log(`❌ XMTP context not available on attempt ${attempt}. Retrying in 2 seconds...`);
+                await new Promise(resolve => setTimeout(resolve, 2000));
+                continue; // Retry
+              } else {
+                // Max retries reached
+                console.log(`❌ XMTP context is NOT available after ${maxRetries} attempts`);
+                console.log(`🔍 Context check details: hasContext=${xmtpContext.hasContext()}`);
+                const result = {
+                  success: false,
+                  error: `XMTP context not available after ${maxRetries} attempts. This function works best within XMTP conversations.`,
+                  hint: "Try asking about conversation details again, or use '/info' command.",
+                  conversationId: conversationId,
+                  attempts: maxRetries
+                };
+                
+                return {
+                  tool_call_id: tool.id,
+                  output: JSON.stringify(result),
+                };
+              }
             }
             
-            // Fallback if no context
-            const result = {
-              success: false,
-              error: "XMTP context not available. This function works best within XMTP conversations.",
-              hint: "Try asking about conversation details again, or use '/info' command.",
-              conversationId: conversationId
-            };
-            
-            return {
-              tool_call_id: tool.id,
-              output: JSON.stringify(result),
-            };
           } catch (error) {
-            console.error('Error with XMTP conversation info:', error);
-            return {
-              tool_call_id: tool.id,
-              output: JSON.stringify({ success: false, error: error.message }),
-            };
+            console.error(`❌ Error with XMTP conversation info (attempt ${attempt}):`, error.message);
+            
+            // If we have retries left, wait and try again
+            if (attempt < maxRetries) {
+              console.log(`⏳ Waiting 2 seconds before retry ${attempt + 1}...`);
+              await new Promise(resolve => setTimeout(resolve, 2000));
+              continue; // Retry
+            } else {
+              // Max retries reached
+              return {
+                tool_call_id: tool.id,
+                output: JSON.stringify({ success: false, error: `Failed after ${maxRetries} attempts: ${error.message}` }),
+              };
+            }
           }
+          } // End of retry while loop
         } else if (tool.function.name === 'look_up_xmtp_user_by_address') {
           console.log(`Looking up XMTP user by wallet address...`);
           
@@ -491,11 +523,22 @@ async function handleRequiresAction(run, threadId) {
           console.log(`Generating conversation summary...`);
           const { conversationId, maxMessages = 100 } = JSON.parse(tool.function.arguments);
           
-          try {
-            // Check if we have XMTP context available
-            if (!xmtpContext.hasContext()) {
-              throw new Error("XMTP context not available. This function works within XMTP conversations only.");
-            }
+          // Retry logic for context availability
+          const maxRetries = 3;
+          let attempt = 0;
+          let lastError = null;
+          
+          while (attempt < maxRetries) {
+            try {
+              attempt++;
+              console.log(`🔍 Attempting conversation summary (attempt ${attempt}/${maxRetries})...`);
+              
+              // Check if we have XMTP context available
+              if (!xmtpContext.hasContext()) {
+                throw new Error("XMTP context not available. This function works within XMTP conversations only.");
+              }
+              
+              console.log(`✅ XMTP context is available - proceeding with summary...`);
             
             const { client, conversation } = xmtpContext.getContext();
             
@@ -511,7 +554,8 @@ async function handleRequiresAction(run, threadId) {
             
             if (!messages || messages.length === 0) {
               const emptyMsg = "No messages found in this conversation to summarize.";
-              await convo.send(emptyMsg);
+              const processedEmptyMsg = replaceKnownAddresses(emptyMsg);
+              await convo.send(processedEmptyMsg);
               return {
                 tool_call_id: tool.id,
                 output: JSON.stringify({ summary: emptyMsg })
@@ -582,24 +626,78 @@ async function handleRequiresAction(run, threadId) {
             
             console.log(`Creating summary from ${messages.length} messages with resolved participants...`);
             
-            // Use OpenAI chat completions to generate summary
-            const summaryResp = await openai.chat.completions.create({
-              model: "gpt-4o-mini",
-              messages: [
-                {
-                  role: "system",
-                  content: "Create a comprehensive and detailed summary of this chat conversation. Include key topics discussed, important points raised by each participant, any decisions made, questions asked, and the overall flow of the conversation. Break it down into sections if there are multiple topics. Keep names concise (first nickname you see) but provide rich detail about the content and context of the discussion."
-                },
-                { 
-                  role: "user", 
-                  content: history 
-                }
-              ],
-            });
-
-            const summary = summaryResp.choices[0].message.content;
+            // Use Assistants API to generate summary (avoiding circular dependency)
+            console.log(`🧵 Creating new thread for conversation summary...`);
             
-            console.log(`Generated conversation summary from ${messages.length} messages`);
+            // Create a new thread for the summary
+            const summaryThread = await openai.beta.threads.create({});
+            const summaryThreadId = summaryThread.id;
+            console.log(`Created summary thread: ${summaryThreadId}`);
+            
+            // Create the summary request message with detailed instructions
+            const summaryMessageObject = {
+              instructions: [
+                "Create an extremely detailed and comprehensive summary of this XMTP chat conversation.",
+                "Be very specific and include as much relevant detail as possible.",
+                "This summary should serve as a complete record that someone could read to fully understand what happened.",
+                "Use the detailed formatting requirements provided in the conversation history below."
+              ],
+              task: "conversation_summary",
+              data: {
+                conversationId: conversationId,
+                messageCount: messages.length,
+                participantCount: Object.keys(senderMapping).length,
+                platform: "XMTP",
+                timestamp: new Date().toISOString()
+              },
+              conversation_history: history,
+              summary_requirements: "Create an extremely detailed and comprehensive summary of this chat conversation. Be very specific and include as much relevant detail as possible. Your summary should include:\n\nREQUIRED DETAILS:\n- Participants: List each person and their role/contributions\n- Timeline: Chronological flow of the conversation with key moments\n- Topics Discussed: Every major and minor topic, with specific details\n- Decisions Made: Any conclusions, agreements, or plans established\n- Questions Asked: Both questions posed and answers given\n- Action Items: Any tasks, follow-ups, or commitments mentioned\n- Links/References: Any URLs, mentions, or external references shared\n- Sentiment/Tone: Overall mood and how it evolved\n- Context: Background information that explains the discussion\n\nFORMATTING:\n- Use clear section headers with bullet points\n- Include specific quotes when they're important\n- Mention exact numbers, dates, times when discussed\n- Reference specific tools, platforms, or technical details mentioned\n- Note any inside jokes, slang, or community-specific references\n\nSTYLE:\n- Keep usernames concise but be extremely detailed about content\n- Don't summarize - include the actual substance of what was discussed\n- If someone explained how something works, include those details\n- If plans were made, include the specifics\n- Capture the personality and voice of the conversation\n\nBe thorough - this summary should serve as a complete record that someone could read to fully understand what happened in this conversation."
+            };
+            
+            const summaryMessage = JSON.stringify(summaryMessageObject, null, 2);
+            
+            // Add message to the summary thread
+            console.log(`📝 Adding conversation history to summary thread...`);
+            await openai.beta.threads.messages.create(summaryThreadId, {
+              role: 'user',
+              content: summaryMessage,
+            });
+            
+            // Use a summary-specific assistant (no functions to avoid recursion)
+            const summaryAssistantModel = process.env.SUMMARY_MODEL || process.env.XMTP_MODEL || process.env.ASST_MODEL;
+            console.log(`🤖 Running summary with assistant model: ${summaryAssistantModel}`);
+            
+            let summaryRun = await openai.beta.threads.runs.createAndPoll(summaryThreadId, {
+              assistant_id: summaryAssistantModel,
+              model: process.env.MODEL,
+            });
+            
+            // No function handling needed for summary-only assistant
+            // If it somehow still requires action, that's an error
+            if (summaryRun.status === 'requires_action') {
+              console.error(`⚠️ Summary assistant tried to call functions - this should not happen!`);
+              throw new Error(`Summary assistant attempted function calls - check SUMMARY_MODEL configuration`);
+            }
+            
+            if (!summaryRun || summaryRun.status !== 'completed') {
+              throw new Error(`Summary generation failed with status: ${summaryRun?.status || 'unknown'}`);
+            }
+            
+            // Extract the summary from the assistant's response
+            const summaryMessages = await openai.beta.threads.messages.list(summaryRun.thread_id);
+            
+            if (!summaryMessages || !summaryMessages.data || summaryMessages.data.length === 0) {
+              throw new Error('No summary response generated');
+            }
+            
+            const assistantMessages = summaryMessages.data.filter(msg => msg.role === 'assistant');
+            if (assistantMessages.length === 0) {
+              throw new Error('No assistant summary found');
+            }
+            
+            const summary = assistantMessages[0].content[0].text.value;
+            
+            console.log(`✅ Generated detailed conversation summary from ${messages.length} messages using Assistants API`);
 
             // Return the summary to fulfill the tool call - let the assistant handle sending it
             return {
@@ -608,12 +706,31 @@ async function handleRequiresAction(run, threadId) {
             };
             
           } catch (error) {
-            console.error('Error generating conversation summary:', error);
-            return {
-              tool_call_id: tool.id,
-              output: JSON.stringify({ success: false, error: error.message }),
-            };
+            lastError = error;
+            console.error(`❌ Attempt ${attempt} failed:`, error.message);
+            
+            // If it's a context error and we have retries left, wait and try again
+            if (error.message.includes("XMTP context not available") && attempt < maxRetries) {
+              console.log(`⏳ Waiting 2 seconds before retry ${attempt + 1}...`);
+              await new Promise(resolve => setTimeout(resolve, 2000));
+              continue; // Retry
+            } else {
+              // For other errors or max retries reached, break out
+              break;
+            }
           }
+          } // End of retry while loop
+          
+          // If we get here, all retries failed
+          console.error(`💥 All ${maxRetries} attempts failed. Last error:`, lastError?.message);
+          return {
+            tool_call_id: tool.id,
+            output: JSON.stringify({ 
+              success: false, 
+              error: `Failed after ${maxRetries} attempts: ${lastError?.message}`,
+              attempts: maxRetries 
+            }),
+          };
         } else {
           console.warn(`No handler for tool: ${tool.function.name}`);
           return {

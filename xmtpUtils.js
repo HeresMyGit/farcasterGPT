@@ -126,6 +126,106 @@ function cleanupExpiredCache() {
 }
 
 /**
+ * Replace known wallet addresses with usernames in outgoing XMTP messages
+ * Uses cached address-to-username mappings from previous lookups
+ * @param {string} message - The message to process
+ * @returns {string} Message with addresses replaced
+ */
+function replaceKnownAddresses(message) {
+  if (!message || typeof message !== 'string') {
+    return message;
+  }
+  
+  let processedMessage = message;
+  let replacementsMade = [];
+  
+  try {
+    // Load cached username mappings
+    const cache = loadUsernameCache();
+    
+    // Process each cached address
+    Object.entries(cache).forEach(([address, entry]) => {
+      if (!entry.username || !address) return;
+      
+      const username = entry.username;
+      const addr = address.toLowerCase();
+      
+      // Create regex patterns for this address (case insensitive)
+      const escapedAddress = addr.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      const patterns = [
+        // Full address (case insensitive)
+        new RegExp(escapedAddress, 'gi'),
+        new RegExp(escapedAddress.replace('0x', '0X'), 'gi'), // Handle 0X variations
+      ];
+      
+      // Add truncated patterns if address is long enough
+      if (addr.length >= 10) {
+        const prefix6 = addr.substring(0, 6);  // 0x1234
+        const prefix8 = addr.substring(0, 8);  // 0x123456
+        const suffix4 = addr.slice(-4);        // abcd
+        const suffix6 = addr.slice(-6);        // 12abcd
+        
+        // Common truncation patterns
+        const truncatedPatterns = [
+          // 0x1234...abcd
+          new RegExp(`${prefix6.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\.\\.\\.${suffix4}`, 'gi'),
+          new RegExp(`${prefix6.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}…${suffix4}`, 'gi'),
+          
+          // 0x123456...abcd  
+          new RegExp(`${prefix8.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\.\\.\\.${suffix4}`, 'gi'),
+          new RegExp(`${prefix8.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}…${suffix4}`, 'gi'),
+          
+          // 0x1234...12abcd
+          new RegExp(`${prefix6.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\.\\.\\.${suffix6}`, 'gi'),
+          new RegExp(`${prefix6.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}…${suffix6}`, 'gi'),
+        ];
+        
+        patterns.push(...truncatedPatterns);
+      }
+      
+      // Apply all patterns for this address
+      patterns.forEach(pattern => {
+        const beforeReplace = processedMessage;
+        processedMessage = processedMessage.replace(pattern, `@${username}`);
+        
+        if (beforeReplace !== processedMessage) {
+          replacementsMade.push(`${addr.slice(0, 8)}... → @${username}`);
+        }
+      });
+    });
+    
+  } catch (error) {
+    console.warn('⚠️ Error loading cache for address replacement:', error.message);
+  }
+  
+  // Fallback: Replace hardcoded @bankr address (in case it's not in cache)
+  const bankrAddress = '0x7F1c0d2955F873Fc91F1728C19b2ED7be7a9684D';
+  const bankrPatterns = [
+    new RegExp(bankrAddress.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'gi'),
+    /0x7F1c\.\.\.684D/gi,
+    /0x7F1c…684D/gi,
+    /0x7F1c0d\.\.\.684D/gi,
+    /0x7F1c0d…684D/gi,
+  ];
+  
+  bankrPatterns.forEach(pattern => {
+    const beforeReplace = processedMessage;
+    processedMessage = processedMessage.replace(pattern, '@bankr');
+    
+    if (beforeReplace !== processedMessage && !replacementsMade.some(r => r.includes('bankr'))) {
+      replacementsMade.push('0x7f1c0d... → @bankr (hardcoded)');
+    }
+  });
+  
+  // Log all replacements made
+  if (replacementsMade.length > 0) {
+    console.log(`🔄 Address replacements made: ${replacementsMade.join(', ')}`);
+  }
+  
+  return processedMessage;
+}
+
+/**
  * Get detailed conversation information
  * @param {Object} conversation - XMTP conversation object
  * @returns {Object} Conversation metadata
@@ -379,9 +479,10 @@ async function lookupFarcasterUsernames(addresses) {
       const addressString = uncachedAddresses.join(',');
       
       console.log(`🌐 API lookup for ${uncachedAddresses.length} address(es)...`);
+      console.log(`🔍 Looking up addresses: ${addressString}`);
       
-      // Make the API call using direct HTTP request
-      const response = await axios.get('https://api.neynar.com/v2/farcaster/user/bulk-by-address/', {
+      // Make the API call using direct HTTP request (removed trailing slash)
+      const response = await axios.get('https://api.neynar.com/v2/farcaster/user/bulk-by-address', {
         params: {
           addresses: addressString,
           address_types: 'custody_address,verified_address' // Search both types
@@ -425,7 +526,14 @@ async function lookupFarcasterUsernames(addresses) {
     return result;
     
   } catch (error) {
-    console.warn(`⚠️ Farcaster username lookup failed:`, error.message);
+    if (error.response) {
+      console.warn(`⚠️ Farcaster username lookup failed:`, 
+        `${error.response.status} ${error.response.statusText}`);
+      console.warn(`🔍 Response data:`, error.response.data);
+      console.warn(`🔍 Request URL:`, error.config?.url);
+    } else {
+      console.warn(`⚠️ Farcaster username lookup failed:`, error.message);
+    }
     return {};
   }
 }
@@ -490,4 +598,5 @@ module.exports = {
   cacheUsername,
   cacheUsernames,
   cleanupExpiredCache,
+  replaceKnownAddresses,
 }; 
