@@ -533,6 +533,11 @@ async function processXMTPMessage(messageContent, senderInfo, conversationId = n
 
     let userMessage = `${cleanUsername} says: ${messageContent}`;
 
+    // Attach metadata lines for the assistant to reference
+    if (conversationId) {
+      userMessage += `\n\n[conversationId: ${conversationId}]`;
+    }
+
     // Append personal prompt unobtrusively if it exists
     if (personalPromptText) {
       userMessage += `\n\n(Personal prompt: ${personalPromptText})`;

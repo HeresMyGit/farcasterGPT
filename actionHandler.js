@@ -9,7 +9,7 @@ const mintclub = require('./mintClub');
 const degen = require('./degen');
 const personalPrompt = require('./personalPrompt');
 const { getXMTPConversationInfo } = require('./assistant');
-const { getConversationAnalytics, lookupFarcasterUsernames, replaceKnownAddresses } = require('./xmtpUtils');
+const { getConversationAnalytics, lookupFarcasterUsernames, replaceKnownAddresses, resolveXMTPDisplayName } = require('./xmtpUtils');
 const xmtpContext = require('./xmtpContext');
 const axios = require('axios');
 const FormData = require('form-data');
@@ -591,7 +591,7 @@ async function handleRequiresAction(run, threadId) {
                 console.log(`Looking up Farcaster usernames for ${walletAddresses.length} wallet addresses...`);
                 const usernames = await lookupFarcasterUsernames(walletAddresses);
                 
-                // Create final mapping: inbox ID → display name
+                // First pass: try Farcaster usernames from wallet lookup
                 uniqueSenderIds.forEach(inboxId => {
                   const walletAddr = inboxToWallet[inboxId];
                   if (walletAddr) {
@@ -601,6 +601,20 @@ async function handleRequiresAction(run, threadId) {
                     senderMapping[inboxId] = `${inboxId.slice(0, 6)}`;
                   }
                 });
+
+                // Second pass: use XMTP display name resolver for any remaining hex-address display names
+                for (const inboxId of uniqueSenderIds) {
+                  if (/^0x[0-9a-fA-F]{6}/.test(senderMapping[inboxId])) {
+                    try {
+                      const display = await resolveXMTPDisplayName(inboxId, client);
+                      if (display && !display.startsWith('0x')) {
+                        senderMapping[inboxId] = display.startsWith('@') ? display : `@${display}`;
+                      }
+                    } catch (_) {
+                      // Ignore resolver errors; keep existing fallback
+                    }
+                  }
+                }
               } else {
                 // Fallback: use truncated inbox IDs
                 uniqueSenderIds.forEach(inboxId => {

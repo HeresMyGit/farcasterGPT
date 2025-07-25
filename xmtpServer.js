@@ -641,7 +641,10 @@ class XMTPServer {
         ? senderInfo.username
         : `@${senderInfo.username}`;
 
-      const contextMessage = `${cleanUsername} says: ${messageContent}`;
+      let contextMessage = `${cleanUsername} says: ${messageContent}`;
+      if (conversationId) {
+        contextMessage += `\n\n[conversationId: ${conversationId}]`;
+      }
 
       // Add message to thread but don't run it
       await createMessage(threadId, contextMessage);
