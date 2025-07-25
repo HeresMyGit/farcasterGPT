@@ -504,8 +504,12 @@ async function processXMTPMessage(messageContent, senderInfo, conversationId = n
   try {
     console.log(`Processing XMTP message: "${messageContent}" from ${senderInfo.username || senderInfo.fid}`);
 
-    // Create a thread for this conversation (using sender's fid as thread identifier)
-    const xmtpThreadId = `xmtp_${senderInfo.fid}`;
+    // Create/lookup the thread for this XMTP conversation. If conversationId is
+    // available we use that so every participant in the same chat maps to the
+    // same OpenAI thread. For 1-on-1 chats (or any case where conversationId is
+    // null) we fall back to the sender's fid which is effectively their wallet
+    // address.
+    const xmtpThreadId = `xmtp_${conversationId || senderInfo.fid}`;
     let threadId = getOpenAIThreadId(xmtpThreadId);
 
     if (!threadId) {
@@ -522,38 +526,20 @@ async function processXMTPMessage(messageContent, senderInfo, conversationId = n
     // Retrieve the personal prompt for the sender, if available
     const personalPromptText = personalPrompt.getPersonalPrompt(senderInfo.fid) || null;
 
-    // Create a machine-friendly user message using JSON to send data
-    let userMessageObject = {
-      instructions: [
-        "This is a message from XMTP (a decentralized messaging protocol).",
-        "Look up this thread to get context from previous messages.",
-        "Respond naturally as if you were in a direct message conversation.",
-        "If the user asks for conversation info or analytics, you can use the getXMTPConversationInfo function.",
-        `Respond to the message from ${senderInfo.username || senderInfo.fid}.`,
-        `IMPORTANT: The sender's name is ${senderInfo.username}. Always use this name when referring to them.`
-      ],
-      data: {
-        messageContent: messageContent,
-        senderUsername: senderInfo.username,
-        senderDisplayName: senderInfo.username, // Add explicit display name field
-        senderFID: senderInfo.fid,
-        platform: "XMTP",
-        conversationId: conversationId,
-        timestamp: new Date().toISOString()
-      }
-    };
-    
-    // Debug: Log what's being sent to AI
-    console.log(`🤖 Sending to AI: sender="${senderInfo.username}", fid="${senderInfo.fid.slice(0, 8)}..."`);
-    console.log(`🤖 AI Instructions include: "Respond to the message from ${senderInfo.username || senderInfo.fid}"`);
-    console.log(`🤖 AI Data includes: senderUsername="${senderInfo.username}"`);;
+    // Build a concise user message for the assistant
+    const cleanUsername = senderInfo.username.startsWith('@')
+      ? senderInfo.username
+      : `@${senderInfo.username}`;
 
-    // Include personalPrompt in the data if it's available
+    let userMessage = `${cleanUsername} says: ${messageContent}`;
+
+    // Append personal prompt unobtrusively if it exists
     if (personalPromptText) {
-      userMessageObject.data.personalPrompt = personalPromptText;
+      userMessage += `\n\n(Personal prompt: ${personalPromptText})`;
     }
 
-    let userMessage = JSON.stringify(userMessageObject, null, 2);
+    // Debug: Log the final text being sent to OpenAI
+    console.log(`🤖 Sending to AI: ${userMessage}`);
 
     await createMessage(threadId, userMessage);
 

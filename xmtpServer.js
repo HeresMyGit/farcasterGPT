@@ -620,8 +620,11 @@ class XMTPServer {
    */
   async addMessageToThread(messageContent, senderInfo, conversationId) {
     try {
-             // Create a thread for this conversation (using sender's fid as thread identifier)
-       const xmtpThreadId = `xmtp_${senderInfo.fid}`;
+             // Build the XMTP → OpenAI mapping key. Prefer the conversationId so that
+       // everyone in the same group chat lands in a single OpenAI thread. When
+       // conversationId is not provided (typical for 1-on-1 chats) default to
+       // the sender’s fid, which corresponds to their wallet address.
+       const xmtpThreadId = `xmtp_${conversationId || senderInfo.fid}`;
        let threadId = getOpenAIThreadId(xmtpThreadId);
 
        if (!threadId) {
@@ -633,25 +636,12 @@ class XMTPServer {
          console.log(`Created new thread ${threadId} for XMTP conversation ${xmtpThreadId}`);
        }
 
-      // Create a context message object (similar to processXMTPMessage but simpler)
-      let contextMessageObject = {
-        context: [
-          "This is a context message from XMTP (not directly addressed to bot).",
-          "This message is added for conversation context only.",
-          `Message from ${senderInfo.username || senderInfo.fid} in group chat.`
-        ],
-        data: {
-          messageContent: messageContent,
-          senderUsername: senderInfo.username,
-          senderFID: senderInfo.fid,
-          platform: "XMTP",
-          conversationId: conversationId,
-          timestamp: new Date().toISOString(),
-          contextOnly: true
-        }
-      };
+      // Build a concise context string for the assistant
+      const cleanUsername = senderInfo.username.startsWith('@')
+        ? senderInfo.username
+        : `@${senderInfo.username}`;
 
-      let contextMessage = JSON.stringify(contextMessageObject, null, 2);
+      const contextMessage = `${cleanUsername} says: ${messageContent}`;
 
       // Add message to thread but don't run it
       await createMessage(threadId, contextMessage);
