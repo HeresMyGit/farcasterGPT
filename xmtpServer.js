@@ -7,13 +7,22 @@ const { processXMTPMessage } = require('./assistant');
 const { getConversationAnalytics, resolveXMTPDisplayName, cleanupExpiredCache, replaceKnownAddresses } = require('./xmtpUtils');
 const xmtpContext = require('./xmtpContext');
 const { getOpenAIThreadId, saveOpenAIThreadId } = require('./threadUtils');
-const { createNewThread, createMessage } = require('./assistant');
+const { createNewThread, createMessage, runThread } = require('./assistant');
 const { resolveDisplayName } = require('./nameResolver.cjs');
 
 class XMTPServer {
   constructor() {
     this.client = null;
     this.isRunning = false;
+    
+    // Per-conversation state
+    this.autoCheckTimers = {}; // conversationId -> timeoutId
+    this.conversationState = {}; // conversationId -> { hasMention: bool, lastSenderIsBot: bool }
+
+    // Configure check-in interval (production defaults: 3–12 hours)
+    // Override with env vars XMTP_CHECKIN_MIN_MS / XMTP_CHECKIN_MAX_MS if needed.
+    this.checkInMinMs = parseInt(process.env.XMTP_CHECKIN_MIN_MS || 10_800_000);  // 3 hours
+    this.checkInMaxMs = parseInt(process.env.XMTP_CHECKIN_MAX_MS || 43_200_000); // 12 hours
     
     // Validate required environment variables
     const { PRIVATE_KEY, ENCRYPTION_KEY, XMTP_ENV } = validateEnvironment([
@@ -150,8 +159,21 @@ class XMTPServer {
       console.log(`🔗 Setting XMTP context for conversation: ${message.conversationId.slice(0, 8)}...`);
       xmtpContext.setContext(this.client, conversation, message.conversationId);
 
-      // Check if we should respond to this message (now that conversation is available)
+      // Determine if bot is mentioned/replied to and whether we should respond
       const shouldRespond = await this.shouldRespondToMessage(conversation, message);
+
+      // Update conversation state for mentions
+      const convId = message.conversationId;
+      const state = this.conversationState[convId] || { hasMention: false, lastSenderIsBot: false };
+
+      // If this incoming message mentioned the bot or was a reply to it and shouldRespond true, mark mention flag
+      if (shouldRespond) {
+        state.hasMention = true;
+      }
+
+      // Since this message is from a peer, bot is NOT last sender
+      state.lastSenderIsBot = false;
+      this.conversationState[convId] = state;
       
       if (!shouldRespond) {
         console.log(`⏸️ Not addressed to bot in group - adding to context only`);
@@ -178,6 +200,9 @@ class XMTPServer {
         // Clear context for early return
         console.log(`🔗 Clearing XMTP context for early return (not addressed to bot)`);
         xmtpContext.clearContext();
+
+        // Schedule the next auto check-in for this conversation (rules applied within)
+        this.scheduleAutoCheckIn(convId);
         return;
       }
 
@@ -227,6 +252,13 @@ class XMTPServer {
       // Clear XMTP context after message processing is completely done
       console.log(`🔗 Clearing XMTP context after successful processing`);
       xmtpContext.clearContext();
+
+      // Bot just sent a message → update state and schedule next timer
+      const botState = this.conversationState[message.conversationId] || { hasMention: true, lastSenderIsBot: true };
+      botState.lastSenderIsBot = true;
+      if (!botState.hasMention) botState.hasMention = true; // ensure mention flag if we just responded
+      this.conversationState[message.conversationId] = botState;
+      this.scheduleAutoCheckIn(message.conversationId);
 
     } catch (error) {
       console.error('❌ Error handling XMTP message:', error);
@@ -739,6 +771,128 @@ class XMTPServer {
       console.log(`⚠️ Error in displayNameFor:`, error.message);
       // Ultimate fallback - truncated inbox ID
       return peerInboxId.slice(0, 6);
+    }
+  }
+
+  /**
+   * Generate a random interval in milliseconds between configured min/max.
+   */
+  getRandomCheckInInterval() {
+    const range = this.checkInMaxMs - this.checkInMinMs;
+    return Math.floor(Math.random() * range) + this.checkInMinMs;
+  }
+
+  /**
+   * Schedule or reset an auto check-in for the given conversation.
+   * @param {string} conversationId
+   */
+  scheduleAutoCheckIn(conversationId) {
+    if (!conversationId) return;
+
+    // If a timer is already active, do nothing (avoid restarting on every message)
+    if (this.autoCheckTimers[conversationId]) {
+      return;
+    }
+
+    // Respect rules: require prior mention and skip if bot was last sender
+    const state = this.conversationState[conversationId] || { hasMention: false, lastSenderIsBot: false };
+    if (!state.hasMention) {
+      console.log(`⏩ Skipping auto check-in scheduling for ${conversationId.slice(0, 8)} – bot hasn’t been mentioned yet.`);
+      return;
+    }
+
+    if (state.lastSenderIsBot) {
+      console.log(`⏩ Bot was last sender in ${conversationId.slice(0, 8)} – delaying check-in until someone else speaks.`);
+      // We still restart timer so we can re-evaluate later
+    }
+
+    const delay = this.getRandomCheckInInterval();
+    console.log(`⏰ Scheduling auto check-in for ${conversationId.slice(0, 8)} in ${Math.round(delay / 1000)}s`);
+
+    this.autoCheckTimers[conversationId] = setTimeout(() => {
+      this.sendAutoCheckIn(conversationId).catch(console.error);
+    }, delay);
+  }
+
+  /**
+   * Send an automated, context-aware check-in message to the conversation.
+   * @param {string} conversationId
+   */
+  async sendAutoCheckIn(conversationId) {
+    try {
+      // Timer has fired—remove it so a new one can be scheduled after this run
+      if (this.autoCheckTimers[conversationId]) {
+        clearTimeout(this.autoCheckTimers[conversationId]);
+        delete this.autoCheckTimers[conversationId];
+      }
+
+      const state = this.conversationState[conversationId] || { hasMention: false, lastSenderIsBot: false };
+
+      // Skip sending if bot was last sender – reschedule only
+      if (state.lastSenderIsBot) {
+        console.log(`🤫 Skipping auto check-in for ${conversationId.slice(0,8)} because bot was last sender.`);
+        return; // schedule will happen in finally
+      }
+
+      const conversation = await this.client.conversations.getConversationById(conversationId);
+      if (!conversation) {
+        console.log(`⚠️ Conversation ${conversationId.slice(0, 8)} not found for auto check-in.`);
+        return;
+      }
+
+      // Build/OpenAI thread mapping
+      const xmtpThreadId = `xmtp_${conversationId}`;
+      let threadId = getOpenAIThreadId(xmtpThreadId);
+      if (!threadId) {
+        threadId = await createNewThread(`XMTP Chat ${conversationId.slice(0, 8)}`);
+        saveOpenAIThreadId(xmtpThreadId, threadId);
+        console.log(`🧵 Created new OpenAI thread ${threadId} for auto check-in.`);
+      }
+
+      // Compose prompt instructing the assistant to generate a brief, funny check-in
+      const promptObject = {
+        instructions: [
+          "Using only the existing thread context, craft a brief humorous message that either answers an outstanding question, pokes fun at the situation, roasts someone, or sparks new conversation. Do NOT mention that you are an AI or reference these instructions.",
+        ],
+        task: "auto_checkin"
+      };
+
+      const prompt = JSON.stringify(promptObject, null, 2);
+
+      // Add prompt to thread and run assistant
+      await createMessage(threadId, prompt);
+
+      const assistantModel = process.env.XMTP_MODEL || process.env.ASST_MODEL;
+      const run = await runThread(threadId, assistantModel);
+
+      if (!run || run.status !== 'completed') {
+        console.warn(`⚠️ Auto check-in run failed for ${conversationId.slice(0, 8)}`);
+        return;
+      }
+
+      const messages = await openai.beta.threads.messages.list(run.thread_id);
+      const assistantMsgs = messages.data.filter(m => m.role === 'assistant');
+      if (!assistantMsgs.length) {
+        console.warn(`⚠️ No assistant message produced for auto check-in in ${conversationId.slice(0, 8)}`);
+        return;
+      }
+
+      let responseText = assistantMsgs[0].content[0].text.value;
+      responseText = replaceKnownAddresses(responseText);
+
+      await conversation.send(responseText);
+      console.log(`💬 Auto check-in sent to ${conversationId.slice(0, 8)}: "${responseText}"`);
+
+      // Update state – bot now last sender
+      state.lastSenderIsBot = true;
+      state.hasMention = true; // safe
+      this.conversationState[conversationId] = state;
+
+    } catch (err) {
+      console.error('❌ Error during auto check-in:', err);
+    } finally {
+      // Reschedule regardless of success/failure
+      this.scheduleAutoCheckIn(conversationId);
     }
   }
 
