@@ -521,8 +521,13 @@ async function handleRequiresAction(run, threadId) {
           }
         } else if (tool.function.name === 'get_conversation_summary') {
           console.log(`Generating conversation summary...`);
-          const { conversationId, maxMessages = 100 } = JSON.parse(tool.function.arguments);
-          
+          let { conversationId, maxMessages = 100 } = JSON.parse(tool.function.arguments);
+
+          // Ensure maxMessages is a safe integer, default 100, and clamp to 500 maximum
+          maxMessages = Number.isInteger(maxMessages) ? maxMessages : 100;
+          if (maxMessages <= 0) maxMessages = 100;
+          if (maxMessages > 500) maxMessages = 500;
+ 
           // Retry logic for context availability
           const maxRetries = 3;
           let attempt = 0;
@@ -548,9 +553,25 @@ async function handleRequiresAction(run, threadId) {
               throw new Error(`Conversation ${conversationId} not found`);
             }
             
-            // Get recent messages (note: XMTP returns messages in reverse chronological order)
-            console.log(`Fetching ${maxMessages} recent messages for summary...`);
-            const messages = await convo.messages(maxMessages);
+            // Fetch the *newest* maxMessages messages. Some SDK versions accept a
+            // direction param; if not, we fall back to slicing the tail.
+            let messages;
+            try {
+              messages = await convo.messages({ limit: maxMessages, direction: 'descending' });
+            } catch (_) {
+              // Fallback – older SDK: fetch all then slice the tail
+              console.warn('⚠️ XMTP SDK did not accept direction param; slicing tail instead');
+              const all = await convo.messages();
+              messages = all.slice(-maxMessages).reverse(); // chronological order
+            }
+
+            // If the direction param worked the list is newest→oldest, so flip to
+            // chronological order for summarization.
+            if (messages.length > 1 && messages[0].sent && messages[1].sent && messages[0].sent < messages[1].sent) {
+              // Already chronological
+            } else {
+              messages = messages.reverse();
+            }
             
             if (!messages || messages.length === 0) {
               const emptyMsg = "No messages found in this conversation to summarize.";
@@ -710,13 +731,27 @@ async function handleRequiresAction(run, threadId) {
             }
             
             const summary = assistantMessages[0].content[0].text.value;
-            
+
+            // Send the raw summary back to the XMTP conversation so the user sees
+            // the detailed output.
+            try {
+              const processedSummary = replaceKnownAddresses(summary);
+              await convo.send(processedSummary);
+            } catch (sendErr) {
+              console.warn('⚠️ Failed to send summary directly to conversation:', sendErr.message);
+            }
+
+ 
             console.log(`✅ Generated detailed conversation summary from ${messages.length} messages using Assistants API`);
 
             // Return the summary to fulfill the tool call - let the assistant handle sending it
             return {
               tool_call_id: tool.id,
-              output: summary  // Return summary directly, not as JSON
+              output: JSON.stringify({
+                summarySent: true,
+                summary: summary,
+                instruction: "Do NOT summarize this again; just make a brief witty comment to acknowledge it."
+              })
             };
             
           } catch (error) {
