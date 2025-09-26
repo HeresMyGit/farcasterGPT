@@ -23,6 +23,19 @@ class XMTPServer {
     // Override with env vars XMTP_CHECKIN_MIN_MS / XMTP_CHECKIN_MAX_MS if needed.
     this.checkInMinMs = parseInt(process.env.XMTP_CHECKIN_MIN_MS || 10_800_000);  // 3 hours
     this.checkInMaxMs = parseInt(process.env.XMTP_CHECKIN_MAX_MS || 43_200_000); // 12 hours
+
+    // Connection health monitoring
+    this.lastMessageTime = Date.now();
+    this.healthCheckInterval = null;
+    this.healthCheckIntervalMs = parseInt(process.env.XMTP_HEALTH_CHECK_MS || 30_000); // 30 seconds
+    this.maxSilencePeriod = parseInt(process.env.XMTP_MAX_SILENCE_MS || 300_000); // 5 minutes
+    this.reconnectAttempts = 0;
+    this.maxReconnectAttempts = parseInt(process.env.XMTP_MAX_RECONNECT_ATTEMPTS || 5);
+    this.streamController = null;
+    
+    // Periodic refresh (backup strategy)
+    this.refreshInterval = null;
+    this.refreshIntervalMs = parseInt(process.env.XMTP_REFRESH_INTERVAL_MS || 21_600_000); // 6 hours
     
     // Validate required environment variables
     const { PRIVATE_KEY, ENCRYPTION_KEY, XMTP_ENV } = validateEnvironment([
@@ -78,31 +91,10 @@ class XMTPServer {
     }
 
     try {
-      console.log('🔄 Syncing conversations...');
-      await this.client.conversations.sync();
-
-      console.log('🧹 Cleaning up expired username cache...');
-      cleanupExpiredCache();
-
-      console.log('👂 Starting XMTP message listener...');
-      this.isRunning = true;
-
-      // Stream all messages for AI responses
-      this.client.conversations.streamAllMessages((error, message) => {
-        if (error) {
-          console.error('❌ Error in XMTP message stream:', error);
-          return;
-        }
-        
-        if (!message) {
-          console.log('⚠️ No message received');
-          return;
-        }
-
-        // Handle the message asynchronously
-        this.handleMessage(message).catch(console.error);
-      });
-
+      await this.startMessageStream();
+      this.startHealthMonitoring();
+      this.startPeriodicRefresh();
+      
       console.log('✅ XMTP server started successfully');
       console.log(`📬 Listening for messages on ${this.xmtpEnv} network...`);
       
@@ -110,6 +102,163 @@ class XMTPServer {
       console.error('❌ Error starting XMTP server:', error);
       this.isRunning = false;
       throw error;
+    }
+  }
+
+  /**
+   * Start the message stream with error handling
+   */
+  async startMessageStream() {
+    console.log('🔄 Syncing conversations...');
+    await this.client.conversations.sync();
+
+    console.log('🧹 Cleaning up expired username cache...');
+    cleanupExpiredCache();
+
+    console.log('👂 Starting XMTP message listener...');
+    this.isRunning = true;
+    this.lastMessageTime = Date.now(); // Reset last message time
+    this.reconnectAttempts = 0; // Reset reconnect attempts
+
+    // Stream all messages for AI responses
+    this.streamController = this.client.conversations.streamAllMessages((error, message) => {
+      if (error) {
+        console.error('❌ Error in XMTP message stream:', error);
+        this.handleStreamError(error);
+        return;
+      }
+      
+      if (!message) {
+        console.log('⚠️ No message received');
+        return;
+      }
+
+      // Update last message time for health monitoring
+      this.lastMessageTime = Date.now();
+
+      // Handle the message asynchronously
+      this.handleMessage(message).catch(console.error);
+    });
+  }
+
+  /**
+   * Start health monitoring to detect dead connections
+   */
+  startHealthMonitoring() {
+    if (this.healthCheckInterval) {
+      clearInterval(this.healthCheckInterval);
+    }
+
+    console.log(`🩺 Starting health monitoring (checking every ${this.healthCheckIntervalMs / 1000}s, reconnect after ${this.maxSilencePeriod / 1000}s silence)`);
+    
+    this.healthCheckInterval = setInterval(() => {
+      this.checkConnectionHealth();
+    }, this.healthCheckIntervalMs);
+  }
+
+  /**
+   * Start periodic connection refresh as backup strategy
+   */
+  startPeriodicRefresh() {
+    if (this.refreshInterval) {
+      clearInterval(this.refreshInterval);
+    }
+
+    console.log(`🔄 Starting periodic refresh (every ${this.refreshIntervalMs / 1000 / 60 / 60}h)`);
+    
+    this.refreshInterval = setInterval(async () => {
+      console.log('🔄 Performing periodic connection refresh...');
+      try {
+        // Proactively refresh the connection
+        await this.client.conversations.sync();
+        console.log('✅ Periodic refresh completed');
+      } catch (error) {
+        console.warn('⚠️ Periodic refresh failed:', error);
+        // Let the health monitoring handle this
+      }
+    }, this.refreshIntervalMs);
+  }
+
+  /**
+   * Check if the connection is still alive
+   */
+  async checkConnectionHealth() {
+    const now = Date.now();
+    const timeSinceLastMessage = now - this.lastMessageTime;
+    
+    // Only log health checks if we're approaching the silence threshold or have issues
+    const warningThreshold = this.maxSilencePeriod * 0.7; // Warn at 70% of max silence
+    
+    if (timeSinceLastMessage > warningThreshold) {
+      console.log(`🩺 Health check: ${Math.round(timeSinceLastMessage / 1000)}s since last message`);
+    }
+    
+    // If we haven't received any messages (including our own) for too long, the connection might be dead
+    if (timeSinceLastMessage > this.maxSilencePeriod) {
+      console.warn(`⚠️ No messages received for ${Math.round(timeSinceLastMessage / 1000)}s, connection may be dead`);
+      
+      // Try to test the connection by syncing conversations
+      try {
+        console.log('🔍 Testing connection by syncing conversations...');
+        await this.client.conversations.sync();
+        console.log('✅ Connection test passed, updating last message time');
+        this.lastMessageTime = now; // Reset the timer since sync worked
+      } catch (syncError) {
+        console.error('❌ Connection test failed:', syncError);
+        await this.handleConnectionFailure();
+      }
+    }
+  }
+
+  /**
+   * Handle stream errors
+   */
+  async handleStreamError(error) {
+    console.error('🔥 XMTP stream error detected:', error);
+    
+    // If the stream dies, try to reconnect
+    await this.handleConnectionFailure();
+  }
+
+  /**
+   * Handle connection failures and attempt reconnection
+   */
+  async handleConnectionFailure() {
+    if (this.reconnectAttempts >= this.maxReconnectAttempts) {
+      console.error(`💀 Max reconnection attempts (${this.maxReconnectAttempts}) reached. Manual intervention required.`);
+      return;
+    }
+
+    this.reconnectAttempts++;
+    const backoffDelay = Math.min(1000 * Math.pow(2, this.reconnectAttempts - 1), 30000); // Exponential backoff, max 30s
+    
+    console.log(`🔄 Attempting reconnection ${this.reconnectAttempts}/${this.maxReconnectAttempts} in ${backoffDelay / 1000}s...`);
+    
+    // Stop current stream and health monitoring
+    this.isRunning = false;
+    if (this.healthCheckInterval) {
+      clearInterval(this.healthCheckInterval);
+      this.healthCheckInterval = null;
+    }
+
+    // Wait before reconnecting
+    await new Promise(resolve => setTimeout(resolve, backoffDelay));
+
+    try {
+      // Reinitialize client and restart stream
+      console.log('🔄 Reinitializing XMTP client...');
+      await this.initialize();
+      await this.startMessageStream();
+      this.startHealthMonitoring();
+      
+      console.log(`✅ Successfully reconnected (attempt ${this.reconnectAttempts})`);
+    } catch (reconnectError) {
+      console.error(`❌ Reconnection attempt ${this.reconnectAttempts} failed:`, reconnectError);
+      
+      // Try again after a delay
+      setTimeout(() => {
+        this.handleConnectionFailure();
+      }, backoffDelay);
     }
   }
 
@@ -292,6 +441,25 @@ class XMTPServer {
     }
 
     this.isRunning = false;
+    
+    // Clean up health monitoring
+    if (this.healthCheckInterval) {
+      clearInterval(this.healthCheckInterval);
+      this.healthCheckInterval = null;
+    }
+    
+    // Clean up periodic refresh
+    if (this.refreshInterval) {
+      clearInterval(this.refreshInterval);
+      this.refreshInterval = null;
+    }
+    
+    // Clean up auto check-in timers
+    Object.values(this.autoCheckTimers).forEach(timerId => {
+      clearTimeout(timerId);
+    });
+    this.autoCheckTimers = {};
+    
     console.log('🛑 XMTP server stopped');
   }
 
