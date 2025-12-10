@@ -108,6 +108,7 @@ async function createMessage(threadId, userMessage) {
 
 // Utility function to run the Assistant on a thread with retry logic
 async function runThread(threadId, assistantId) {
+  console.log(`[ASSISTANT MODEL] Using assistant model: ${assistantId} for thread: ${threadId}`);
   const maxRetries = 10; // Set a maximum number of retries
   let attempt = 0;
 

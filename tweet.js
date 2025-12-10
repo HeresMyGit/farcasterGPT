@@ -170,9 +170,11 @@ async function createMessage(threadId, userMessage) {
 
 // Run the thread and get the assistant's response (mirrors structure from assistant.js)
 async function handleThread(threadId) {
+  const assistantModel = process.env.TWITTER_ASST_MODEL;
   console.log(`Running assistant on thread ${threadId}...`);
+  console.log(`[TWITTER] Using assistant model: ${assistantModel}`);
   try {
-    const run = await runThread(threadId, process.env.TWITTER_ASST_MODEL);
+    const run = await runThread(threadId, assistantModel);
 
     if (run.status === 'completed') {
       console.log(`Run completed successfully on thread: ${threadId}`);
@@ -342,7 +344,12 @@ async function sendDailyGMTweet() {
 
   try {
     // Generate tweet content using GPT
-    const prompt = "Generate a short, upbeat 'gm' tweet for mfers that includes $gmfr and a positive vibe. always include a link to the gmfer coin: https://mint.club/token/base/GMFR";
+    const prompt = [
+      "write a short, direct, lowercase 'gm' tweet for mfers.",
+      "hard cap 220 characters. no emoji. no hashtags. $mfer allowed.",
+      "keep the tone smug/chill/sarcastic but positive. no greeting or closing fluff.",
+      "output ONLY the tweet text."
+    ].join(" ");
     const threadId = await createNewThread("Daily GM Thread");
     await createMessage(threadId, prompt);
     const tweetContent = await handleThread(threadId);
@@ -356,8 +363,8 @@ async function sendDailyGMTweet() {
     const randomStyle = styleOptions[Math.floor(Math.random() * styleOptions.length)];
 
     // Generate the image (robot mfer)
-    const mferImagePrompt = `A robot mfer enjoying a sunny morning, wearing headphones, smoking a cigarette. The background is sunny with yellow beams. The stick figure says 'gmfers' in a cartoon speech bubble. $GMFR. Style: ${randomStyle}. Take inspiration from this tweet: ${tweetContent}`;
-    const imageUrl = await generateImage(mferImagePrompt);
+    const mferImagePrompt = `A robot mfer enjoying a sunny morning. Round metal head with a small red light/antenna on top, black over-ear headphones, eyes are a single black rectangle visor, and a checkerboard mouth. Stick-figure body, smoking a cigarette. The background is sunny with yellow beams. The stick figure says 'gmfers' in a cartoon speech bubble. $GMFR. Style: ${randomStyle}. Take inspiration from this tweet: ${tweetContent}`;
+    const imageUrl = await imageModule.generateImage(mferImagePrompt);
 
     const localImagePath = path.join(__dirname, 'gm-image.png');
 
@@ -419,7 +426,7 @@ Description: ${description.description}
 
 ${ownerInfo.address ? `This mfer is ${ownerString}.` : 'Owner information unavailable.'}
 
-Write an engaging, fun tweet announcing this as the mfer of the day. Describe what makes this mfer unique based on its traits. ${ownerInfo.hasHumanReadableName ? `Give a shoutout to the owner (${ownerInfo.displayName}).` : ''} Keep it casual and in the mfer community vibe. Include $mfer somewhere in the tweet. Keep it under 280 characters. Only output the tweet text, nothing else.`;
+Write a mfer style tweet announcing this as the mfer of the day. Describe what makes this mfer unique based on its traits. ${ownerInfo.hasHumanReadableName ? `Give a shoutout to the owner (${ownerInfo.displayName}).` : ''} Keep it casual and in the mfer community vibe. Keep it under 280 characters. Only output the tweet text, nothing else.  no emoji`;
 
     await createMessage(threadId, prompt);
     const tweetContent = await handleThread(threadId);
@@ -494,8 +501,8 @@ async function postMostPopularMferTweet(searchTerm = 'mfercoin') {
     try {
       // 1. Generate a GPT response to the tweet
       console.log('Generating GPT response...');
-      const threadId = 'thread_wKxHCwpP7wje0KCwbU20cXek';
-      await createMessage(threadId, `Create a witty, sarcastic, or insightful comment about this tweet. This tweet may or may not have anything to do with the mfers NFT/crypto community, but use it as a fun launchpad to bring the conversation back to mfers, $mfer, or the broader crypto/NFT space in a clever way. Only output the tweet, do not put it in quotes or anything else. Type as if you are typing directly into the tweet window. Remember to always keep mfers and $mfer in a positive light. Respond to this tweet: "${text}"`);
+      const threadId = await createNewThread(`Quote tweet for ${searchTerm}`);
+      await createMessage(threadId, `Create a witty, sarcastic, or insightful comment about this tweet. This tweet may or may not have anything to do with the mfers NFT/crypto community, but use it as a fun launchpad to bring the conversation back to mfers, $mfer, or the broader crypto/NFT space in a clever way. Hard cap 240 characters, lower-case, no emoji. Only output the tweet, do not put it in quotes or anything else. Type as if you are typing directly into the tweet window. Remember to always keep mfers and $mfer in a positive light. Respond to this tweet: "${text}"`);
       const gptResponse = await handleThread(threadId);
 
       if (!gptResponse) {
@@ -555,7 +562,7 @@ async function sendDailyNiftyIslandTweet() {
 
   try {
     // Define the tweet content prompt
-    const prompt = `Compose a bullish tweet about Nifty Island and tag @Nifty_Island in the text.  Don't use emoji in the body, only at the end of the post.  mferGPT has been launched on "$mfer $island" (access it here: https://niftyis.land/heresmy/heresmyisland?ref=heresmy). The tweet should mention mferGPT and emphasize its excitement for interacting with mfers on Nifty Island. Keep the tone positive, fun, and engaging.  A few notes on Nifty Island: 1) It is already released and playable. 2) Best web3 game there is. 3) Bots and Agents are now integrated, and mferGPT is one of the first integrated. 4) Shooting games, races, infection, pvp, hang out, so much to do!`;
+    const prompt = `Compose a bullish tweet about Nifty Island and tag @Nifty_Island in the text. no emoji. mferGPT has been launched on "$mfer $island" (access it here: https://niftyis.land/heresmy/heresmyisland?ref=heresmy). The tweet should mention mferGPT and emphasize its excitement for interacting with mfers on Nifty Island. Keep the tone positive, fun, and engaging.  A few notes on Nifty Island: 1) It is already released and playable. 2) Best web3 game there is. 3) Bots and Agents are now integrated, and mferGPT is one of the first integrated. 4) Shooting games, races, infection, pvp, hang out, so much to do!`;
 
     // Create a new thread for the Nifty Island tweet
     const threadId = await createNewThread("Daily Nifty Island Meme Thread");
@@ -663,7 +670,7 @@ async function processRecentMints() {
     const nftLinks = mintsToPost.map(nft => nft.zora).join('\n');
 
     // Prepare the prompt for GPT to generate the tweet content
-    const prompt = `We've minted ${mintsToPost.length} new NFTs in the last 12 hours! Check out the full collection here: ${collectionLink}\n\nCompose a concise and engaging tweet announcing these new mints. Keep it under 280 characters.  Only include the collection URL, not each individual URL.`;
+    const prompt = `We've minted ${mintsToPost.length} new NFTs in the last 12 hours! Check out the full collection here: ${collectionLink}\n\nCompose a concise and engaging tweet announcing these new mints. Keep it under 280 characters. no emoji. Only include the collection URL, not each individual URL.`;
 
     console.log('Generating tweet content via GPT...');
     
@@ -788,7 +795,7 @@ async function fetchAndReplyToMostLikedMention(userId, count = 10) {
     console.log(`Generating response for mention: "${mentionText}"`);
     const tweetJson = JSON.stringify(mostLikedMention, null, 2);
     const promptText = (newThread ? "reply to this tweet:" : "reply to the next tweet in the thread:");
-    await createMessage(threadId, `${promptText} "${tweetJson}"`);
+    await createMessage(threadId, `${promptText} "${tweetJson}"\n\nconstraints: no emoji. keep it short and direct. lowercase. output only the tweet text.`);
     const assistantResponse = await handleThread(threadId);
 
     if (!assistantResponse) {
