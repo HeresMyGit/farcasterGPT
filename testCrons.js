@@ -66,17 +66,18 @@ twitterModule.sendTweet = async function mockSendTweet(text, imagePaths = [], qu
 const { neynarClient } = require('./client.js');
 
 // ============================================================================
-// STEP 2.5: Mock generateImage to avoid actual API calls
+// STEP 2.5: Wrap generateImage so dry runs still generate and log URLs
 // ============================================================================
 
 const imageModule = require('./image.js');
 const originalGenerateImage = imageModule.generateImage;
 
 imageModule.generateImage = async function mockGenerateImage(prompt) {
-  console.log('\n📸 DRY RUN - Image generation would be called with prompt:');
+  console.log('\n📸 DRY RUN - Generating image with prompt:');
   console.log(`   "${prompt.substring(0, 100)}${prompt.length > 100 ? '...' : ''}"`);
-  // Return a placeholder image URL for dry run
-  return 'https://cybermfers.sfo3.digitaloceanspaces.com/cybermfers/public/assets/png/1874.png';
+  const url = await originalGenerateImage(prompt);
+  console.log(`   ✅ Image URL: ${url}`);
+  return url;
 };
 let castCount = 0;
 
