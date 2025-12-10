@@ -8,6 +8,9 @@ const { createToken } = require('./zora.js')
 const mintclub = require('./mintClub');
 const degen = require('./degen');
 const personalPrompt = require('./personalPrompt');
+const { getXMTPConversationInfo } = require('./assistant');
+const { getConversationAnalytics, lookupFarcasterUsernames, replaceKnownAddresses, resolveXMTPDisplayName } = require('./xmtpUtils');
+const xmtpContext = require('./xmtpContext');
 const axios = require('axios');
 const FormData = require('form-data');
 
@@ -370,6 +373,412 @@ async function handleRequiresAction(run, threadId) {
           return {
             tool_call_id: tool.id,
             output: JSON.stringify(result)
+          };
+        } else if (tool.function.name === 'getXMTPConversationInfo') {
+          console.log(`Fetching XMTP conversation info...`);
+          const { conversationId } = JSON.parse(tool.function.arguments);
+          
+          // Retry logic for context availability
+          const maxRetries = 3;
+          let attempt = 0;
+          
+          while (attempt < maxRetries) {
+            try {
+              attempt++;
+              console.log(`🔍 Checking XMTP context availability (attempt ${attempt}/${maxRetries})...`);
+              
+              // Check if we have XMTP context available
+              if (xmtpContext.hasContext()) {
+              console.log(`✅ XMTP context is available for conversation summary`);
+              const contextInfo = xmtpContext.getContext();
+              console.log(`🔗 Context details: conversationId=${contextInfo.conversationId?.slice(0, 8)}...`);
+              const { client, conversation } = xmtpContext.getContext();
+              
+              // Get conversation analytics directly
+              const analytics = await getConversationAnalytics(conversation, client);
+              
+              if (analytics) {
+                const result = {
+                  success: true,
+                  conversationInfo: {
+                    id: analytics.info.conversationId ? 
+                        analytics.info.conversationId.substring(0, 8) + '...' : 'unknown',
+                    type: analytics.info.conversationType,
+                    created: new Date(analytics.info.createdAt).toLocaleDateString(),
+                    messageCount: analytics.info.messageCount,
+                    isActive: analytics.info.isActive,
+                    participants: {
+                      you: analytics.participants.self.inboxId ? 
+                           analytics.participants.self.inboxId.substring(0, 8) + '...' : 'unknown',
+                      peer: analytics.participants.peer.inboxId ? 
+                            analytics.participants.peer.inboxId.substring(0, 8) + '...' : 'unknown',
+                      peerDevices: analytics.participants.peer.installations
+                    },
+                    activity: {
+                      conversationAge: analytics.status.conversationAge !== null ? 
+                                      analytics.status.conversationAge + ' days' : 'unknown',
+                      lastActivity: analytics.status.lastActivity ? 
+                                   new Date(analytics.status.lastActivity).toLocaleString() : 'unknown',
+                      hoursSinceLastActivity: analytics.status.hoursSinceLastActivity !== undefined ? 
+                                             analytics.status.hoursSinceLastActivity + 'h ago' : 'unknown'
+                    }
+                  }
+                };
+                
+                return {
+                  tool_call_id: tool.id,
+                  output: JSON.stringify(result),
+                };
+              }
+            } else {
+              // No context available, check if we should retry
+              if (attempt < maxRetries) {
+                console.log(`❌ XMTP context not available on attempt ${attempt}. Retrying in 2 seconds...`);
+                await new Promise(resolve => setTimeout(resolve, 2000));
+                continue; // Retry
+              } else {
+                // Max retries reached
+                console.log(`❌ XMTP context is NOT available after ${maxRetries} attempts`);
+                console.log(`🔍 Context check details: hasContext=${xmtpContext.hasContext()}`);
+                const result = {
+                  success: false,
+                  error: `XMTP context not available after ${maxRetries} attempts. This function works best within XMTP conversations.`,
+                  hint: "Try asking about conversation details again, or use '/info' command.",
+                  conversationId: conversationId,
+                  attempts: maxRetries
+                };
+                
+                return {
+                  tool_call_id: tool.id,
+                  output: JSON.stringify(result),
+                };
+              }
+            }
+            
+          } catch (error) {
+            console.error(`❌ Error with XMTP conversation info (attempt ${attempt}):`, error.message);
+            
+            // If we have retries left, wait and try again
+            if (attempt < maxRetries) {
+              console.log(`⏳ Waiting 2 seconds before retry ${attempt + 1}...`);
+              await new Promise(resolve => setTimeout(resolve, 2000));
+              continue; // Retry
+            } else {
+              // Max retries reached
+              return {
+                tool_call_id: tool.id,
+                output: JSON.stringify({ success: false, error: `Failed after ${maxRetries} attempts: ${error.message}` }),
+              };
+            }
+          }
+          } // End of retry while loop
+        } else if (tool.function.name === 'look_up_xmtp_user_by_address') {
+          console.log(`Looking up XMTP user by wallet address...`);
+          
+          try {
+            const { walletAddress } = JSON.parse(tool.function.arguments);
+            
+            if (!walletAddress) {
+              throw new Error('Wallet address is required');
+            }
+            
+            console.log(`🔍 Looking up user for address: ${walletAddress}`);
+            
+            // Use our existing lookup function
+            const usernames = await lookupFarcasterUsernames([walletAddress]);
+            const normalizedAddress = walletAddress.toLowerCase();
+            const username = usernames[normalizedAddress];
+            
+            const result = {
+              success: true,
+              walletAddress: walletAddress,
+              farcasterUsername: username || null,
+              displayName: username ? `@${username}` : null,
+              found: !!username,
+              lookupMethod: username ? 'neynar_bulk_api' : 'not_found'
+            };
+            
+            if (username) {
+              console.log(`✅ Found user: ${walletAddress} → @${username}`);
+            } else {
+              console.log(`❌ No Farcaster username found for: ${walletAddress}`);
+            }
+            
+            return {
+              tool_call_id: tool.id,
+              output: JSON.stringify(result),
+            };
+          } catch (error) {
+            console.error('Error looking up XMTP user by address:', error);
+            return {
+              tool_call_id: tool.id,
+              output: JSON.stringify({ 
+                success: false, 
+                error: error.message,
+                walletAddress: tool.function.arguments ? JSON.parse(tool.function.arguments).walletAddress : 'unknown'
+              }),
+            };
+          }
+        } else if (tool.function.name === 'get_conversation_summary') {
+          console.log(`Generating conversation summary...`);
+          let { conversationId, maxMessages = 100 } = JSON.parse(tool.function.arguments);
+
+          // Ensure maxMessages is a safe integer, default 100, and clamp to 500 maximum
+          maxMessages = Number.isInteger(maxMessages) ? maxMessages : 100;
+          if (maxMessages <= 0) maxMessages = 100;
+          if (maxMessages > 500) maxMessages = 500;
+ 
+          // Retry logic for context availability
+          const maxRetries = 3;
+          let attempt = 0;
+          let lastError = null;
+          
+          while (attempt < maxRetries) {
+            try {
+              attempt++;
+              console.log(`🔍 Attempting conversation summary (attempt ${attempt}/${maxRetries})...`);
+              
+              // Check if we have XMTP context available
+              if (!xmtpContext.hasContext()) {
+                throw new Error("XMTP context not available. This function works within XMTP conversations only.");
+              }
+              
+              console.log(`✅ XMTP context is available - proceeding with summary...`);
+            
+            const { client, conversation } = xmtpContext.getContext();
+            
+            // Get the conversation by ID to ensure we have the right one
+            const convo = await client.conversations.getConversationById(conversationId);
+            if (!convo) {
+              throw new Error(`Conversation ${conversationId} not found`);
+            }
+            
+            // Fetch the *newest* maxMessages messages. Some SDK versions accept a
+            // direction param; if not, we fall back to slicing the tail.
+            let messages;
+            try {
+              messages = await convo.messages({ limit: maxMessages, direction: 'descending' });
+            } catch (_) {
+              // Fallback – older SDK: fetch all then slice the tail
+              console.warn('⚠️ XMTP SDK did not accept direction param; slicing tail instead');
+              const all = await convo.messages();
+              messages = all.slice(-maxMessages).reverse(); // chronological order
+            }
+
+            // If the direction param worked the list is newest→oldest, so flip to
+            // chronological order for summarization.
+            if (messages.length > 1 && messages[0].sent && messages[1].sent && messages[0].sent < messages[1].sent) {
+              // Already chronological
+            } else {
+              messages = messages.reverse();
+            }
+            
+            if (!messages || messages.length === 0) {
+              const emptyMsg = "No messages found in this conversation to summarize.";
+              const processedEmptyMsg = replaceKnownAddresses(emptyMsg);
+              await convo.send(processedEmptyMsg);
+              return {
+                tool_call_id: tool.id,
+                output: JSON.stringify({ summary: emptyMsg })
+              };
+            }
+            
+            // Extract unique sender inbox IDs and resolve to usernames
+            const uniqueSenderIds = [...new Set(messages.map(m => m.senderInboxId))];
+            console.log(`Resolving ${uniqueSenderIds.length} unique participants for summary...`);
+            
+            // Resolve inbox IDs to wallet addresses
+            const senderMapping = {};
+            
+            try {
+              // Get inbox states for all unique senders
+              const inboxStates = await client.preferences.inboxStateFromInboxIds(uniqueSenderIds);
+              
+              // Extract wallet addresses
+              const walletAddresses = [];
+              const inboxToWallet = {};
+              
+              inboxStates.forEach((state, index) => {
+                const inboxId = uniqueSenderIds[index];
+                const walletAddr = state?.identifiers?.[0]?.identifier;
+                if (walletAddr) {
+                  walletAddresses.push(walletAddr);
+                  inboxToWallet[inboxId] = walletAddr;
+                }
+              });
+              
+              // Look up Farcaster usernames for wallet addresses
+              if (walletAddresses.length > 0) {
+                console.log(`Looking up Farcaster usernames for ${walletAddresses.length} wallet addresses...`);
+                const usernames = await lookupFarcasterUsernames(walletAddresses);
+                
+                // First pass: try Farcaster usernames from wallet lookup
+                uniqueSenderIds.forEach(inboxId => {
+                  const walletAddr = inboxToWallet[inboxId];
+                  if (walletAddr) {
+                    const username = usernames[walletAddr.toLowerCase()];
+                    senderMapping[inboxId] = username ? `@${username}` : `${walletAddr.slice(0, 6)}...${walletAddr.slice(-4)}`;
+                  } else {
+                    senderMapping[inboxId] = `${inboxId.slice(0, 6)}`;
+                  }
+                });
+
+                // Second pass: use XMTP display name resolver for any remaining hex-address display names
+                for (const inboxId of uniqueSenderIds) {
+                  if (/^0x[0-9a-fA-F]{6}/.test(senderMapping[inboxId])) {
+                    try {
+                      const display = await resolveXMTPDisplayName(inboxId, client);
+                      if (display && !display.startsWith('0x')) {
+                        senderMapping[inboxId] = display.startsWith('@') ? display : `@${display}`;
+                      }
+                    } catch (_) {
+                      // Ignore resolver errors; keep existing fallback
+                    }
+                  }
+                }
+              } else {
+                // Fallback: use truncated inbox IDs
+                uniqueSenderIds.forEach(inboxId => {
+                  senderMapping[inboxId] = `${inboxId.slice(0, 6)}`;
+                });
+              }
+              
+              console.log(`Resolved participants:`, Object.entries(senderMapping).map(([id, name]) => `${id.slice(0, 6)}...→${name}`));
+              
+            } catch (resolutionError) {
+              console.warn('Error resolving participants, using fallback names:', resolutionError.message);
+              // Fallback: use truncated inbox IDs
+              uniqueSenderIds.forEach(inboxId => {
+                senderMapping[inboxId] = `${inboxId.slice(0, 6)}`;
+              });
+            }
+            
+            // Format messages for summarization (newest first, so reverse to get chronological order)
+            const history = messages
+              .reverse() // Convert to oldest → newest
+              .map((m) => `${senderMapping[m.senderInboxId] || m.senderInboxId.slice(0, 6)}: ${m.content}`)
+              .join('\n');
+            
+            console.log(`Creating summary from ${messages.length} messages with resolved participants...`);
+            
+            // Use Assistants API to generate summary (avoiding circular dependency)
+            console.log(`🧵 Creating new thread for conversation summary...`);
+            
+            // Create a new thread for the summary
+            const summaryThread = await openai.beta.threads.create({});
+            const summaryThreadId = summaryThread.id;
+            console.log(`Created summary thread: ${summaryThreadId}`);
+            
+            // Create the summary request message with detailed instructions
+            const summaryMessageObject = {
+              instructions: [
+                "Create an extremely detailed and comprehensive summary of this XMTP chat conversation.",
+                "Be very specific and include as much relevant detail as possible.",
+                "This summary should serve as a complete record that someone could read to fully understand what happened.",
+                "Use the detailed formatting requirements provided in the conversation history below."
+              ],
+              task: "conversation_summary",
+              data: {
+                conversationId: conversationId,
+                messageCount: messages.length,
+                participantCount: Object.keys(senderMapping).length,
+                platform: "XMTP",
+                timestamp: new Date().toISOString()
+              },
+              conversation_history: history,
+              summary_requirements: "Create an extremely detailed and comprehensive summary of this chat conversation. Be very specific and include as much relevant detail as possible. Your summary should include:\n\nREQUIRED DETAILS:\n- Participants: List each person and their role/contributions\n- Timeline: Chronological flow of the conversation with key moments\n- Topics Discussed: Every major and minor topic, with specific details\n- Decisions Made: Any conclusions, agreements, or plans established\n- Questions Asked: Both questions posed and answers given\n- Action Items: Any tasks, follow-ups, or commitments mentioned\n- Links/References: Any URLs, mentions, or external references shared\n- Sentiment/Tone: Overall mood and how it evolved\n- Context: Background information that explains the discussion\n\nFORMATTING:\n- Use clear section headers with bullet points\n- Include specific quotes when they're important\n- Mention exact numbers, dates, times when discussed\n- Reference specific tools, platforms, or technical details mentioned\n- Note any inside jokes, slang, or community-specific references\n\nSTYLE:\n- Keep usernames concise but be extremely detailed about content\n- Don't summarize - include the actual substance of what was discussed\n- If someone explained how something works, include those details\n- If plans were made, include the specifics\n- Capture the personality and voice of the conversation\n\nBe thorough - this summary should serve as a complete record that someone could read to fully understand what happened in this conversation."
+            };
+            
+            const summaryMessage = JSON.stringify(summaryMessageObject, null, 2);
+            
+            // Add message to the summary thread
+            console.log(`📝 Adding conversation history to summary thread...`);
+            await openai.beta.threads.messages.create(summaryThreadId, {
+              role: 'user',
+              content: summaryMessage,
+            });
+            
+            // Use a summary-specific assistant (no functions to avoid recursion)
+            const summaryAssistantModel = process.env.SUMMARY_MODEL || process.env.XMTP_MODEL || process.env.ASST_MODEL;
+            console.log(`🤖 Running summary with assistant model: ${summaryAssistantModel}`);
+            
+            let summaryRun = await openai.beta.threads.runs.createAndPoll(summaryThreadId, {
+              assistant_id: summaryAssistantModel,
+              model: process.env.MODEL,
+            });
+            
+            // No function handling needed for summary-only assistant
+            // If it somehow still requires action, that's an error
+            if (summaryRun.status === 'requires_action') {
+              console.error(`⚠️ Summary assistant tried to call functions - this should not happen!`);
+              throw new Error(`Summary assistant attempted function calls - check SUMMARY_MODEL configuration`);
+            }
+            
+            if (!summaryRun || summaryRun.status !== 'completed') {
+              throw new Error(`Summary generation failed with status: ${summaryRun?.status || 'unknown'}`);
+            }
+            
+            // Extract the summary from the assistant's response
+            const summaryMessages = await openai.beta.threads.messages.list(summaryRun.thread_id);
+            
+            if (!summaryMessages || !summaryMessages.data || summaryMessages.data.length === 0) {
+              throw new Error('No summary response generated');
+            }
+            
+            const assistantMessages = summaryMessages.data.filter(msg => msg.role === 'assistant');
+            if (assistantMessages.length === 0) {
+              throw new Error('No assistant summary found');
+            }
+            
+            const summary = assistantMessages[0].content[0].text.value;
+
+            // Send the raw summary back to the XMTP conversation so the user sees
+            // the detailed output.
+            try {
+              const processedSummary = replaceKnownAddresses(summary);
+              await convo.send(processedSummary);
+            } catch (sendErr) {
+              console.warn('⚠️ Failed to send summary directly to conversation:', sendErr.message);
+            }
+
+ 
+            console.log(`✅ Generated detailed conversation summary from ${messages.length} messages using Assistants API`);
+
+            // Return the summary to fulfill the tool call - let the assistant handle sending it
+            return {
+              tool_call_id: tool.id,
+              output: JSON.stringify({
+                summarySent: true,
+                summary: summary,
+                instruction: "Do NOT summarize this again; just make a brief witty comment to acknowledge it."
+              })
+            };
+            
+          } catch (error) {
+            lastError = error;
+            console.error(`❌ Attempt ${attempt} failed:`, error.message);
+            
+            // If it's a context error and we have retries left, wait and try again
+            if (error.message.includes("XMTP context not available") && attempt < maxRetries) {
+              console.log(`⏳ Waiting 2 seconds before retry ${attempt + 1}...`);
+              await new Promise(resolve => setTimeout(resolve, 2000));
+              continue; // Retry
+            } else {
+              // For other errors or max retries reached, break out
+              break;
+            }
+          }
+          } // End of retry while loop
+          
+          // If we get here, all retries failed
+          console.error(`💥 All ${maxRetries} attempts failed. Last error:`, lastError?.message);
+          return {
+            tool_call_id: tool.id,
+            output: JSON.stringify({ 
+              success: false, 
+              error: `Failed after ${maxRetries} attempts: ${lastError?.message}`,
+              attempts: maxRetries 
+            }),
           };
         } else {
           console.warn(`No handler for tool: ${tool.function.name}`);

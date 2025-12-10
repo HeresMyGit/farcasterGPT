@@ -84,7 +84,8 @@ async function postNFTToTwitter(nftJson) {
     const userMessageObject = {
       instructions: [
         "Create a brief and engaging tweet for the following NFT that was just created on your zora mferGPT art contract.",
-        "Include the name, artist, and description, and encourage viewers to mint it on Zora (include the URL)."
+        "Include the name, artist, and description, and encourage viewers to mint it on Zora (include the URL).",
+        "no emoji."
       ],
       data: {
         name: name,
@@ -106,8 +107,10 @@ async function postNFTToTwitter(nftJson) {
     });
 
     // Run the Assistant on the thread
+    const assistantModel = process.env.ASST_MODEL;
+    console.log(`[TWITTER] Using assistant model: ${assistantModel} for postNFTToTwitter`);
     const run = await openai.beta.threads.runs.createAndPoll(thread.id, {
-      assistant_id: process.env.ASST_MODEL,
+      assistant_id: assistantModel,
       model: process.env.MODEL,
     });
 
@@ -130,7 +133,7 @@ async function postNFTToTwitter(nftJson) {
     const tweetContent = `${assistantResponse}\n\n${zora}`;
 
     // Post to Twitter with image
-    await sendTweet(tweetContent, [imagePath]);
+    await sendTweet(tweetContent, [imagePath], null, null, thread.id);
 
     // Delete the temporary image file
     fs.unlinkSync(imagePath);

@@ -107,7 +107,8 @@ async function createMessage(threadId, userMessage) {
 }
 
 // Utility function to run the Assistant on a thread with retry logic
-async function runThread(threadId, authorUsername) {
+async function runThread(threadId, assistantId) {
+  console.log(`[ASSISTANT MODEL] Using assistant model: ${assistantId} for thread: ${threadId}`);
   const maxRetries = 10; // Set a maximum number of retries
   let attempt = 0;
 
@@ -142,7 +143,7 @@ async function runThread(threadId, authorUsername) {
 
       // If no runs in progress or requiring action, start a new run
       let run = await openai.beta.threads.runs.createAndPoll(threadId, {
-        assistant_id: process.env.ASST_MODEL,
+        assistant_id: assistantId,
         model: process.env.MODEL,
         // instructions: `use the following user profiles as context... \n${userContext}`, // Add instructions if needed
       });
@@ -316,8 +317,8 @@ async function handleWebhook(req, res) {
     await createMessage(threadId, userMessage);
 
     // Step 3: Run the Assistant on the thread
-    let botMessage = 'Sorry, I couldn’t complete the request at this time.';
-    const run = await runThread(threadId, authorUsername);
+    let botMessage = 'Sorry, I couldn\'t complete the request at this time.';
+    const run = await runThread(threadId, process.env.ASST_MODEL);
 
     if (!run || !run.status) {
       console.error('Run object is undefined or missing a status property.');
@@ -376,11 +377,11 @@ async function handleWebhook(req, res) {
         ...(isFirstChunk && imageUrl ? { embeds: [{ url: imageUrl }] } : {})
       };
 
-      // const reply = await neynarClient.publishCast(
-      //   process.env.SIGNER_UUID,
-      //   chunk,
-      //   currentReplyOptions
-      // );
+      const reply = await neynarClient.publishCast(
+        process.env.SIGNER_UUID,
+        chunk,
+        currentReplyOptions
+      );
 
       console.log('Reply sent:', chunk);
       
@@ -459,6 +460,153 @@ function addHamTip(inputString, multiplier = 15) {
     }
 }
 
+// Function to get XMTP conversation analytics (can be called by AI)
+async function getXMTPConversationInfo(conversationId, client) {
+  try {
+    console.log(`Getting XMTP conversation info for: ${conversationId}`);
+    
+    const conversation = await client.conversations.getConversationById(conversationId);
+    if (!conversation) {
+      throw new Error('Conversation not found');
+    }
+
+    const { getConversationAnalytics } = require('./xmtpUtils');
+    const analytics = await getConversationAnalytics(conversation, client);
+    
+    if (analytics) {
+      // Return formatted info for the AI
+      return {
+        success: true,
+        conversation: {
+          id: analytics.info.conversationId,
+          type: analytics.info.conversationType,
+          created: analytics.info.createdAt,
+          messageCount: analytics.info.messageCount,
+          participants: analytics.participants,
+          lastActivity: analytics.status.lastActivity,
+          conversationAge: analytics.status.conversationAge,
+          messageStats: analytics.messageHistory?.stats
+        }
+      };
+    }
+    
+    throw new Error('Could not retrieve conversation analytics');
+  } catch (error) {
+    console.error('Error getting XMTP conversation info:', error);
+    return {
+      success: false,
+      error: error.message
+    };
+  }
+}
+
+// Function specifically for processing XMTP messages
+async function processXMTPMessage(messageContent, senderInfo, conversationId = null, client = null) {
+  try {
+    console.log(`Processing XMTP message: "${messageContent}" from ${senderInfo.username || senderInfo.fid}`);
+
+    // Create/lookup the thread for this XMTP conversation. If conversationId is
+    // available we use that so every participant in the same chat maps to the
+    // same OpenAI thread. For 1-on-1 chats (or any case where conversationId is
+    // null) we fall back to the sender's fid which is effectively their wallet
+    // address.
+    const xmtpThreadId = `xmtp_${conversationId || senderInfo.fid}`;
+    let threadId = getOpenAIThreadId(xmtpThreadId);
+
+    if (!threadId) {
+      // No existing OpenAI thread, create a new one
+      threadId = await createNewThread(`XMTP Chat with ${senderInfo.username || senderInfo.fid}`);
+      
+      // Save the new mapping
+      saveOpenAIThreadId(xmtpThreadId, threadId);
+      console.log(`Created new thread ${threadId} for XMTP conversation ${xmtpThreadId}`);
+    } else {
+      console.log(`Using existing OpenAI thread ID: ${threadId} for XMTP conversation: ${xmtpThreadId}`);
+    }
+
+    // Retrieve the personal prompt for the sender, if available
+    const personalPromptText = personalPrompt.getPersonalPrompt(senderInfo.fid) || null;
+
+    // Build a concise user message for the assistant
+    const cleanUsername = senderInfo.username.startsWith('@')
+      ? senderInfo.username
+      : `@${senderInfo.username}`;
+
+    let userMessage = `${cleanUsername} says: ${messageContent}`;
+
+    // Attach metadata lines for the assistant to reference
+    if (conversationId) {
+      userMessage += `\n\n[conversationId: ${conversationId}]`;
+    }
+
+    // Append personal prompt unobtrusively if it exists
+    if (personalPromptText) {
+      userMessage += `\n\n(Personal prompt: ${personalPromptText})`;
+    }
+
+    // Debug: Log the final text being sent to OpenAI
+    console.log(`🤖 Sending to AI: ${userMessage}`);
+
+    await createMessage(threadId, userMessage);
+
+    // Run the Assistant on the thread (use XMTP_MODEL if available, otherwise fall back to ASST_MODEL)
+    let botMessage = 'Sorry, I couldn\'t complete the request at this time.';
+    const assistantModel = process.env.XMTP_MODEL || process.env.ASST_MODEL;
+    const run = await runThread(threadId, assistantModel);
+    
+    console.log(`Using assistant model: ${assistantModel} for XMTP message`);
+
+    if (!run || !run.status) {
+      console.error('Run object is undefined or missing a status property.');
+      throw new Error('OpenAI run failed');
+    }
+
+    // Check if the run has completed successfully
+    if (run.status === 'completed') {
+      const messages = await openai.beta.threads.messages.list(run.thread_id);
+
+      if (messages && messages.data && messages.data.length > 0) {
+        const assistantMessages = messages.data.filter(msg => msg.role === 'assistant');
+        if (assistantMessages.length > 0) {
+          botMessage = assistantMessages[0].content[0].text.value;
+          console.log(`Generated XMTP response using threadID ${threadId}`);
+        } else {
+          console.error('No assistant messages found.');
+          throw new Error('No assistant response generated');
+        }
+      } else {
+        console.error('No messages found in the thread.');
+        throw new Error('No messages in thread');
+      }
+    } else if (run.status === 'requires_action') {
+      // Handle function calls if needed
+      const updatedRun = await handleRequiresAction(run, threadId);
+      
+      if (updatedRun && updatedRun.status === 'completed') {
+        const messages = await openai.beta.threads.messages.list(updatedRun.thread_id);
+        
+        if (messages && messages.data && messages.data.length > 0) {
+          const assistantMessages = messages.data.filter(msg => msg.role === 'assistant');
+          if (assistantMessages.length > 0) {
+            botMessage = assistantMessages[0].content[0].text.value;
+            console.log(`Generated XMTP response with actions using threadID ${threadId}`);
+          }
+        }
+      }
+    } else {
+      console.error(`Run did not complete successfully. Status: ${run.status}`);
+      throw new Error(`OpenAI run failed with status: ${run.status}`);
+    }
+
+    return botMessage;
+
+  } catch (error) {
+    console.error('Error processing XMTP message:', error);
+    return 'Sorry, I encountered an error processing your message. Please try again.';
+  }
+}
+
+// Update exports to include the functions needed by niftyHandler
 module.exports = {
   handleRequiresAction,
   createNewThread,
@@ -467,4 +615,6 @@ module.exports = {
   generateImage,
   handleWebhook,
   splitMessageIntoChunks,
+  processXMTPMessage,
+  getXMTPConversationInfo,
 };
