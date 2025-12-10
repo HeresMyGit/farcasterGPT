@@ -893,17 +893,17 @@ cron.schedule('30 6,18 * * *', async () => {
 });
 
 // // Runs every 20 minutes starting at the 5-minute mark (Pacific Time)
-cron.schedule('5,25,45 * * * *', async () => {
-  console.log('Running reply to recent mention at the 5-minute mark');
-  const USER_ID = '1724482668195110912'; // Replace with your actual user ID
-  await fetchAndReplyToMostLikedMention(USER_ID);
-});
+// cron.schedule('5,25,45 * * * *', async () => {
+//   console.log('Running reply to recent mention at the 5-minute mark');
+//   const USER_ID = '1724482668195110912'; // Replace with your actual user ID
+//   await fetchAndReplyToMostLikedMention(USER_ID);
+// });
 
 // Schedule the function to run daily at 12:30 PM Pacific Time
-cron.schedule('50 12 * * *', async () => {
-  console.log('Running the daily Nifty Island meme tweet...');
-  // await sendDailyNiftyIslandTweet();
-});
+// cron.schedule('50 12 * * *', async () => {
+//   console.log('Running the daily Nifty Island meme tweet...');
+//   await sendDailyNiftyIslandTweet();
+// });
 
 // (async () => {
 //   console.log('Running the scheduled tweetAssistantResponse...');
