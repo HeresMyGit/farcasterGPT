@@ -1,10 +1,19 @@
 const fetch = require('node-fetch');
 const { ethers } = require('ethers');
-const { resolveDisplayName } = require('./nameResolver.cjs');
 
 // mfers NFT contract on Ethereum mainnet
 const MFERS_CONTRACT_ADDRESS = '0x79FCDEF22feeD20eDDacbB2587640e45491b757f';
 const MFERS_ABI = ['function ownerOf(uint256 tokenId) view returns (address)'];
+
+// Lazy load nameResolver to avoid blocking at require time
+let _resolveDisplayName = null;
+async function getResolveDisplayName() {
+  if (!_resolveDisplayName) {
+    const nameResolver = require('./nameResolver.cjs');
+    _resolveDisplayName = nameResolver.resolveDisplayName;
+  }
+  return _resolveDisplayName;
+}
 
 // Fetch the mfer description and generate an image based on traits
 async function getMferDescription(mferID) {
@@ -32,14 +41,29 @@ async function getMferOwner(mferID) {
   try {
     console.log(`Fetching owner of mfer #${mferID} on Ethereum mainnet...`);
     
-    // Use a public Ethereum RPC endpoint
-    const provider = new ethers.JsonRpcProvider('https://rpc.ankr.com/eth');
-    const contract = new ethers.Contract(MFERS_CONTRACT_ADDRESS, MFERS_ABI, provider);
+    // Use public Ethereum RPC endpoints (try multiple in case one fails)
+    const rpcEndpoints = [
+      'https://eth.llamarpc.com',
+      'https://cloudflare-eth.com',
+      'https://ethereum.publicnode.com',
+      'https://1rpc.io/eth',
+    ];
     
-    const ownerAddress = await contract.ownerOf(mferID);
-    console.log(`Owner of mfer #${mferID}: ${ownerAddress}`);
+    let lastError = null;
+    for (const rpc of rpcEndpoints) {
+      try {
+        const provider = new ethers.JsonRpcProvider(rpc);
+        const contract = new ethers.Contract(MFERS_CONTRACT_ADDRESS, MFERS_ABI, provider);
+        const ownerAddress = await contract.ownerOf(mferID);
+        console.log(`Owner of mfer #${mferID}: ${ownerAddress}`);
+        return ownerAddress;
+      } catch (err) {
+        lastError = err;
+        console.log(`RPC ${rpc} failed, trying next...`);
+      }
+    }
     
-    return ownerAddress;
+    throw lastError || new Error('All RPC endpoints failed');
   } catch (error) {
     console.error(`Error fetching owner of mfer #${mferID}:`, error.message);
     return null;
@@ -52,11 +76,12 @@ async function getMferOwnerInfo(mferID) {
     const ownerAddress = await getMferOwner(mferID);
     
     if (!ownerAddress) {
-      return { address: null, displayName: null };
+      return { address: null, displayName: null, hasHumanReadableName: false };
     }
     
     // Try to resolve the address to a human-readable name
     console.log(`Resolving display name for ${ownerAddress}...`);
+    const resolveDisplayName = await getResolveDisplayName();
     const displayName = await resolveDisplayName(ownerAddress, 8000);
     
     console.log(`Resolved display name: ${displayName}`);

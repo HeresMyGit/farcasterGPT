@@ -8,7 +8,7 @@ const fetch = require('node-fetch'); // Include node-fetch
 const path = require('path');
 const { loadTrendingSummaries } = require('./threadUtils');
 const { splitMessageIntoChunks } = require('./assistant')
-const { generateImage } = require('./image.js');
+const imageModule = require('./image.js');
 const { interpretUrl } = require('./attachments.js');
 
 require('dotenv').config();
@@ -462,7 +462,7 @@ async function generateAndCastImage(summaries, prompt, memeThread) {
     console.log('Generated comic prompt:', generatedPrompt);
 
     // Step 4: Generate the image based on the GPT-generated prompt
-    const imageUrl = await generateImage("a hilarious meme about the following: " + generatedPrompt);
+    const imageUrl = await imageModule.generateImage("a hilarious meme about the following: " + generatedPrompt);
     console.log('Image url generated:', imageUrl);
 
     return {

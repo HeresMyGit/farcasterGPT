@@ -5,7 +5,17 @@
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
     "gen:xmtp-keys": "node generateXMTPKeys.js",
-    "start": "node index.js"
+    "start": "node index.js",
+    "test:cron": "node testCrons.js",
+    "test:mfer-of-the-day": "node testCrons.js mfer-of-the-day",
+    "test:gm": "node testCrons.js gm",
+    "test:quote": "node testCrons.js quote-tweet",
+    "test:mints": "node testCrons.js recent-mints",
+    "test:mentions": "node testCrons.js reply-mentions",
+    "test:nifty": "node testCrons.js nifty-island",
+    "test:summary": "node testCrons.js daily-summary",
+    "test:trending": "node testCrons.js trending-summary",
+    "test:meme": "node testCrons.js daily-meme"
   },
   "keywords": [],
   "author": "",

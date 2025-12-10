@@ -2,7 +2,7 @@ const { openai } = require('./client');
 const farcaster = require('./farcaster');
 const ham = require('./ham');
 const { getMferDescription } = require('./mfer.js');
-const { generateImage } = require('./image.js');
+const imageModule = require('./image.js');
 const { interpretUrl } = require('./attachments.js');
 const { createToken } = require('./zora.js')
 const mintclub = require('./mintClub');
@@ -211,7 +211,7 @@ async function handleRequiresAction(run, threadId) {
 
           // Call the image generation function (shell implementation for now)
           console.warn(`Generating image based on prompt: ${prompt}...`);
-          const imageUrl = await generateImage(prompt); // Placeholder for actual image generation logic
+          const imageUrl = await imageModule.generateImage(prompt);
           console.warn(`Generated image based on prompt: ${prompt}...`);
 
           // Store the image url in some map for later retrieval (use threadId/runId as key)

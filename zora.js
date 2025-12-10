@@ -4,7 +4,8 @@ const FormData = require('form-data');
 const { loadImageLog, loadMintLog, saveMintLog, loadUserMints, saveUserMint, lastMintForUser  } = require('./threadUtils');
 const { getTokenBalance, initializeContracts } = require('./mintClub.js'); 
 const { postNFTToFarcaster, postNFTToTwitter } = require('./zoraTweeter.js');
-const { SplitsClient } = require('@0xsplits/splits-sdk');
+// Lazy load SplitsClient to avoid blocking at module load time
+let SplitsClient = null;
 const { createPublicClient, createWalletClient, http } = require('viem');
 const { privateKeyToAccount } = require('viem/accounts');
 require('dotenv').config();
@@ -111,16 +112,26 @@ const walletClient = createWalletClient({
     transport: http(),
 });
 
-// Initialize the SplitsClient
-const splitsClient = new SplitsClient({
-    chainId: customChain.id,
-    publicClient,
-    walletClient,
-    includeEnsNames: false,
-    apiConfig: {
-        apiKey: splitsApiKey, // Ensure your API key is set in the .env file
-    },
-}).splitV1;
+// Lazy initialize the SplitsClient (to avoid blocking at module load time)
+let _splitsClient = null;
+function getSplitsClient() {
+    if (!_splitsClient) {
+        // Lazy load the splits-sdk package
+        if (!SplitsClient) {
+            SplitsClient = require('@0xsplits/splits-sdk').SplitsClient;
+        }
+        _splitsClient = new SplitsClient({
+            chainId: customChain.id,
+            publicClient,
+            walletClient,
+            includeEnsNames: false,
+            apiConfig: {
+                apiKey: splitsApiKey,
+            },
+        }).splitV1;
+    }
+    return _splitsClient;
+}
 
 async function uploadToIPFS(data) {
   try {
@@ -300,6 +311,7 @@ async function createSplitAndPredictAddress(userWalletAddress, recipientAddress)
         };
 
         // Predict the split address
+        const splitsClient = getSplitsClient();
         const predicted = await splitsClient.predictImmutableSplitAddress(splitsConfig);
 
         console.log("Predicted split address:", predicted.splitAddress);

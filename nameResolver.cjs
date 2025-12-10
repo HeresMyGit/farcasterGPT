@@ -23,7 +23,7 @@ const getName = async (...args) =>
 
 // ----- RPC clients -----------------------------------------------------------
 const rpcBase = 'https://base.publicnode.com';        // free, no API key
-const rpcEth  = 'https://rpc.ankr.com/eth';           // or any mainnet endpoint
+const rpcEth  = 'https://eth.llamarpc.com';           // free public RPC
 
 const baseClient = createPublicClient({ chain: base,    transport: http(rpcBase) });
 const ethClient  = createPublicClient({ chain: mainnet, transport: http(rpcEth) });

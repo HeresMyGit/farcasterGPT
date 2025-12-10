@@ -8,7 +8,7 @@ const {
   saveOpenAIThreadId,
 } = require('./threadUtils');
 const { getMferDescription } = require('./mfer.js');
-const { generateImage } = require('./image.js');
+const imageModule = require('./image.js');
 const { interpretUrl } = require('./attachments.js');
 const { createToken } = require('./zora.js')
 const farcaster = require('./farcaster');
@@ -611,7 +611,7 @@ module.exports = {
   createNewThread,
   createMessage,
   runThread,
-  generateImage,
+  generateImage: imageModule.generateImage,
   handleWebhook,
   splitMessageIntoChunks,
   processXMTPMessage,

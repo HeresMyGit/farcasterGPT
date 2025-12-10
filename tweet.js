@@ -1,7 +1,8 @@
 require('dotenv').config(); // Load environment variables
 const { OpenAI } = require('openai'); // Import OpenAI SDK
-const { sendTweet, fetchMostPopularMferTweet, fetchMostLikedMentions } = require('./twitter.js'); // Import the sendTweet function
-const { generateImage } = require('./image.js'); // Import image generation function
+const twitter = require('./twitter.js'); // Import twitter module (allows mocking sendTweet for tests)
+const { fetchMostPopularMferTweet, fetchMostLikedMentions } = twitter;
+const imageModule = require('./image.js'); // Import image module (allows mocking for tests)
 const { getMferDescription, getMferOwnerInfo } = require('./mfer.js');
 const { NeynarAPIClient } = require('@neynar/nodejs-sdk');
 const { generateAndCastImage } = require('./castDailySummary.js')
@@ -278,7 +279,7 @@ async function generateTweetImage(mferId, tweetContent) {
   const refinedPrompt = await getRefinedImagePrompt(initialPrompt);
 
   console.log(`Refined image prompt: ${refinedPrompt}`);
-  return await generateImage(refinedPrompt);
+  return await imageModule.generateImage(refinedPrompt);
 }
 
 // Function to get a refined image prompt by creating a new thread and sending the initial prompt
@@ -321,7 +322,7 @@ async function tweetAssistantResponse(prompt) {
       const customImagePath = path.join(__dirname, 'custom-image.png');
       await downloadImage(customImageUrl, customImagePath); // Download custom image
 
-      await sendTweet(assistantResponse, [localImagePath, customImagePath], null, null, threadId); // Send tweet with both images
+      await twitter.sendTweet(assistantResponse, [localImagePath, customImagePath], null, null, threadId); // Send tweet with both images
 
       // Delete images after use
       await deleteLocalImage(localImagePath);
@@ -357,7 +358,7 @@ async function sendDailyGMTweet() {
 
     // Generate the image (robot mfer)
     const mferImagePrompt = `A robot mfer enjoying a sunny morning, wearing headphones, smoking a cigarette. The background is sunny with yellow beams. The stick figure says 'gmfers' in a cartoon speech bubble. $GMFR. Style: ${randomStyle}. Take inspiration from this tweet: ${tweetContent}`;
-    const imageUrl = await generateImage(mferImagePrompt);
+    const imageUrl = await imageModule.generateImage(mferImagePrompt);
 
     const localImagePath = path.join(__dirname, 'gm-image.png');
 
@@ -365,7 +366,7 @@ async function sendDailyGMTweet() {
     await downloadImage(imageUrl, localImagePath);
 
     // Send tweet
-    await sendTweet(tweetContent, [localImagePath], null, null, threadId);
+    await twitter.sendTweet(tweetContent, [localImagePath], null, null, threadId);
 
     // Clean up the image file
     await deleteLocalImage(localImagePath);
@@ -447,7 +448,7 @@ Write an engaging, fun tweet announcing this as the mfer of the day. Describe wh
     ]);
 
     // Send tweet with both images (actual mfer first, then AI-generated)
-    await sendTweet(tweetContent, [mferImagePath, customImagePath], null, null, threadId);
+    await twitter.sendTweet(tweetContent, [mferImagePath, customImagePath], null, null, threadId);
 
     // Clean up images
     await Promise.all([
@@ -535,7 +536,7 @@ async function postMostPopularMferTweet(searchTerm = 'mfercoin') {
 
       console.log(`Posting the quote tweet: ${gptResponse}`);
       // Uncomment the following line to post the tweet
-      await sendTweet(gptResponse, [localImagePath], tweetId, null, threadId);
+      await twitter.sendTweet(gptResponse, [localImagePath], tweetId, null, threadId);
 
       // Clean up local image file
       await deleteLocalImage(localImagePath);
@@ -604,7 +605,7 @@ async function sendDailyNiftyIslandTweet() {
     `;
 
     console.log(`Generating image for the Nifty Island meme with feature: ${randomFeature}`);
-    const imageUrl = await generateImage(imagePrompt);
+    const imageUrl = await imageModule.generateImage(imagePrompt);
 
     if (!imageUrl) {
       console.error('Failed to generate image for the Nifty Island meme. Skipping tweet.');
@@ -617,7 +618,7 @@ async function sendDailyNiftyIslandTweet() {
 
     // Post the tweet with the image
     console.log('Posting the Nifty Island meme to Twitter...');
-    await sendTweet(tweetContent, [localImagePath], null, null, threadId);
+    await twitter.sendTweet(tweetContent, [localImagePath], null, null, threadId);
 
     // Clean up the local image file
     await deleteLocalImage(localImagePath);
@@ -707,7 +708,7 @@ async function processRecentMints() {
 
     // Post the tweet with images
     console.log('Posting multiple mints to Twitter with images: ', validImagePaths);
-    await sendTweet(tweetContent, validImagePaths, null, null, threadId);
+    await twitter.sendTweet(tweetContent, validImagePaths, null, null, threadId);
 
     // Delete the downloaded images after successful tweet
     for (const imagePath of validImagePaths) {
@@ -815,7 +816,7 @@ async function fetchAndReplyToMostLikedMention(userId, count = 10) {
 
     // Reply to the tweet
     console.log(`Replying to Tweet ID: ${tweetId} with: "${assistantResponse}"`);
-    await sendTweet(assistantResponse, localFilePaths, null, tweetId, threadId);
+    await twitter.sendTweet(assistantResponse, localFilePaths, null, tweetId, threadId);
 
     // Clean up downloaded images
     for (const filePath of localFilePaths) {
@@ -911,3 +912,15 @@ cron.schedule('50 12 * * *', async () => {
 //   // await fetchAndReplyToMostLikedMention(USER_ID);
 //   await sendDailyNiftyIslandTweet();
 // })();
+
+// Export functions for testing
+module.exports = {
+  sendMferOfTheDay,
+  sendDailyGMTweet,
+  postMostPopularMferTweet,
+  processRecentMints,
+  fetchAndReplyToMostLikedMention,
+  sendDailyNiftyIslandTweet,
+  tweetAssistantResponse,
+  generateTweetImage,
+};
