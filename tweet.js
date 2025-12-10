@@ -862,28 +862,43 @@ const searchTerms = [
   'ethereum'
 ];
 
-// Random search terms for 4th slot
+// Random search terms for 4th+ slot
 const randomSearchTerms = ['ai', 'crypto', 'nft', 'sartoshi', 'onchain', 'blockchain', 'base'];
 
 let searchTermIndex = 0;
+const totalQuoteSlotsPerDay = 6;
 
-// Runs 4 times per day (6am, 12pm, 6pm, 12am Pacific Time)
-// Cycles through different search terms
-cron.schedule('0 7,13,19,1 * * *', async () => {
+async function runScheduledQuoteTweet(slotLabel = '') {
   let searchTerm;
-  
+
   if (searchTermIndex < searchTerms.length) {
     searchTerm = searchTerms[searchTermIndex];
   } else {
-    // Pick random term for 4th slot
     searchTerm = randomSearchTerms[Math.floor(Math.random() * randomSearchTerms.length)];
   }
-  
-  console.log(`Running scheduled quote tweet task ${searchTermIndex + 1}/4 for: ${searchTerm}`);
+
+  console.log(`Running scheduled quote tweet task ${searchTermIndex + 1}/${totalQuoteSlotsPerDay} for: ${searchTerm}${slotLabel ? ` (${slotLabel})` : ''}`);
   await postMostPopularMferTweet(searchTerm);
-  
-  // Increment and reset index (cycle through 4 slots)
-  searchTermIndex = (searchTermIndex + 1) % 4;
+
+  // Increment and wrap the index (cycle through the first 3 fixed, then randoms)
+  searchTermIndex = (searchTermIndex + 1) % totalQuoteSlotsPerDay;
+}
+
+// Quote tweet schedule (Pacific Time):
+// 1:00am, 7:00am, 11:00am, 1:00pm, 3:30pm, 7:00pm
+const quoteTweetSlots = [
+  { label: '1:00am PT', cronSpec: '0 1 * * *' },
+  { label: '7:00am PT', cronSpec: '0 7 * * *' },
+  { label: '11:00am PT', cronSpec: '0 11 * * *' },
+  { label: '1:00pm PT', cronSpec: '0 13 * * *' },
+  { label: '4:00pm PT', cronSpec: '0 16 * * *' },
+  { label: '7:00pm PT', cronSpec: '0 19 * * *' },
+];
+
+quoteTweetSlots.forEach(({ label, cronSpec }) => {
+  cron.schedule(cronSpec, async () => {
+    await runScheduledQuoteTweet(label);
+  });
 });
 
 // // Schedule the processRecentMints function to run at 6:30am and 6:30pm PT
