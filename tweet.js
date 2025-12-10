@@ -2,7 +2,7 @@ require('dotenv').config(); // Load environment variables
 const { OpenAI } = require('openai'); // Import OpenAI SDK
 const { sendTweet, fetchMostPopularMferTweet, fetchMostLikedMentions } = require('./twitter.js'); // Import the sendTweet function
 const { generateImage } = require('./image.js'); // Import image generation function
-const { getMferDescription } = require('./mfer.js');
+const { getMferDescription, getMferOwnerInfo } = require('./mfer.js');
 const { NeynarAPIClient } = require('@neynar/nodejs-sdk');
 const { generateAndCastImage } = require('./castDailySummary.js')
 const { postNFTToTwitter } = require('./zoraTweeter.js');
@@ -376,10 +376,95 @@ async function sendDailyGMTweet() {
   }
 }
 
+// Function to generate and send the mfer of the day tweet
+async function sendMferOfTheDay() {
+  console.log('Generating and sending the mfer of the day tweet...');
+
+  try {
+    // Pick a random mfer ID (0-10020)
+    const mferId = Math.floor(Math.random() * 10021);
+    console.log(`Selected mfer #${mferId} for mfer of the day`);
+
+    // Fetch mfer description and owner info in parallel
+    const [description, ownerInfo] = await Promise.all([
+      getMferDescription(mferId.toString()),
+      getMferOwnerInfo(mferId)
+    ]);
+
+    if (description.error) {
+      console.error('Failed to fetch mfer description. Aborting.');
+      return;
+    }
+
+    // Build owner info string
+    let ownerString = '';
+    if (ownerInfo.address) {
+      if (ownerInfo.hasHumanReadableName) {
+        ownerString = `owned by ${ownerInfo.displayName}`;
+      } else {
+        ownerString = `owned by ${ownerInfo.displayName || ownerInfo.address.slice(0, 6) + '...' + ownerInfo.address.slice(-4)}`;
+      }
+    }
+
+    // Create a new thread for this mfer of the day
+    const threadId = await createNewThread("mfer of the day Thread");
+
+    // Build the prompt for the LLM to generate the tweet
+    const prompt = `Generate a tweet for "mfer of the day" featuring mfer #${mferId}.
+
+Here are the mfer's traits:
+${JSON.stringify(description.traits, null, 2)}
+
+Description: ${description.description}
+
+${ownerInfo.address ? `This mfer is ${ownerString}.` : 'Owner information unavailable.'}
+
+Write an engaging, fun tweet announcing this as the mfer of the day. Describe what makes this mfer unique based on its traits. ${ownerInfo.hasHumanReadableName ? `Give a shoutout to the owner (${ownerInfo.displayName}).` : ''} Keep it casual and in the mfer community vibe. Include $mfer somewhere in the tweet. Keep it under 280 characters. Only output the tweet text, nothing else.`;
+
+    await createMessage(threadId, prompt);
+    const tweetContent = await handleThread(threadId);
+
+    if (!tweetContent) {
+      console.error('Failed to generate GPT content for the mfer of the day tweet. Aborting.');
+      return;
+    }
+
+    console.log(`Generated tweet: ${tweetContent}`);
+
+    // Generate AI image based on the mfer description
+    const customImageUrl = await generateTweetImage(mferId, tweetContent);
+    
+    // Get the actual mfer image URL
+    const mferImageUrl = generateMferImageURL(mferId);
+
+    // Download both images
+    const mferImagePath = path.join(__dirname, 'mfer-of-the-day.png');
+    const customImagePath = path.join(__dirname, 'mfer-of-the-day-custom.png');
+
+    await Promise.all([
+      downloadImage(mferImageUrl, mferImagePath),
+      downloadImage(customImageUrl, customImagePath)
+    ]);
+
+    // Send tweet with both images (actual mfer first, then AI-generated)
+    await sendTweet(tweetContent, [mferImagePath, customImagePath], null, null, threadId);
+
+    // Clean up images
+    await Promise.all([
+      deleteLocalImage(mferImagePath),
+      deleteLocalImage(customImagePath)
+    ]);
+
+    console.log('mfer of the day tweet sent successfully!');
+  } catch (error) {
+    console.error('Error generating or sending the mfer of the day tweet:', error);
+  }
+}
+
 // Function to post the most popular $mfer tweet to your account
-async function postMostPopularMferTweet() {
-  console.log('Fetching the most popular $mfer tweet...');
-  const mostPopularTweet = await fetchMostPopularMferTweet();
+async function postMostPopularMferTweet(searchTerm = 'mfercoin') {
+  console.log(`Fetching the most popular tweet for search term: "${searchTerm}"...`);
+  const mostPopularTweet = await fetchMostPopularMferTweet(searchTerm);
 //   const mostPopularTweet = {
 //   "edit_history_tweet_ids": [
 //     "1855707106881556834"
@@ -410,7 +495,7 @@ async function postMostPopularMferTweet() {
       // 1. Generate a GPT response to the tweet
       console.log('Generating GPT response...');
       const threadId = 'thread_wKxHCwpP7wje0KCwbU20cXek';
-      await createMessage(threadId, `Create a witty or insightful comment about this tweet.  Only output the tweet, do not put it in quotes or anything else.  type as if you are typing directly into the tweet window. remember to always keep mfers and $mfer in a positive light.  respond to this tweet: "${text}"`);
+      await createMessage(threadId, `Create a witty, sarcastic, or insightful comment about this tweet. This tweet may or may not have anything to do with the mfers NFT/crypto community, but use it as a fun launchpad to bring the conversation back to mfers, $mfer, or the broader crypto/NFT space in a clever way. Only output the tweet, do not put it in quotes or anything else. Type as if you are typing directly into the tweet window. Remember to always keep mfers and $mfer in a positive light. Respond to this tweet: "${text}"`);
       const gptResponse = await handleThread(threadId);
 
       if (!gptResponse) {
@@ -750,13 +835,11 @@ const types = ["a bullpost", "funny", "a story about yourself", "absurd", "heart
 const topics = ["mfers", "mfercoin", "mfers", "$mfer", "mfers nfts", "ai", "onchain ai", "twitter/x", "farcaster", "blockchain", "mfercoin", "mfers", "$mfer backed assets from mfer.club", "mfer.com", "whatever you want", "anything", "crypto", "gmfer ($gmfr) backed by $mfer", "sartoshicoin ($sartoshi) backed by $mfer"];
 
 
-// Runs every 4 hours starting at midnight (Pacific Time)
-cron.schedule('0 0-23/8 * * *', async () => {
-  console.log('Running the scheduled tweetAssistantResponse...');
-  const randomLength = lengths[Math.floor(Math.random() * lengths.length)];
-  const prompt = `the next random tweet should be ${randomLength}.  remember always include $mfer. next`;
-  console.log(`Sending prompt: ${prompt}`);
-  await tweetAssistantResponse(prompt);
+// Runs every day at 8am Pacific Time
+// mfer of the day
+cron.schedule('0 8 * * *', async () => {
+  console.log('Running mfer of the day tweet...');
+  await sendMferOfTheDay();
 });
 
 // Runs every day at 7am Pacific Time
@@ -765,10 +848,35 @@ cron.schedule('30 7 * * *', async () => {
   await sendDailyGMTweet();
 });
 
-// // Runs every day at 5pm Pacific Time
-cron.schedule('0 12 * * *', async () => {
-  console.log('Running scheduled task to fetch and post the most popular $mfer tweet...');
-  await postMostPopularMferTweet();
+// Search terms to cycle through
+const searchTerms = [
+  'mfercoin',
+  'mfers', 
+  'ethereum'
+];
+
+// Random search terms for 4th slot
+const randomSearchTerms = ['ai', 'crypto', 'nft', 'sartoshi', 'onchain', 'blockchain', 'base'];
+
+let searchTermIndex = 0;
+
+// Runs 4 times per day (6am, 12pm, 6pm, 12am Pacific Time)
+// Cycles through different search terms
+cron.schedule('0 7,13,19,1 * * *', async () => {
+  let searchTerm;
+  
+  if (searchTermIndex < searchTerms.length) {
+    searchTerm = searchTerms[searchTermIndex];
+  } else {
+    // Pick random term for 4th slot
+    searchTerm = randomSearchTerms[Math.floor(Math.random() * randomSearchTerms.length)];
+  }
+  
+  console.log(`Running scheduled quote tweet task ${searchTermIndex + 1}/4 for: ${searchTerm}`);
+  await postMostPopularMferTweet(searchTerm);
+  
+  // Increment and reset index (cycle through 4 slots)
+  searchTermIndex = (searchTermIndex + 1) % 4;
 });
 
 // // Schedule the processRecentMints function to run at 6:30am and 6:30pm PT

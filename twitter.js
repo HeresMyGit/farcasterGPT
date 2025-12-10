@@ -46,8 +46,8 @@ function generateAuthHeader(url, method) {
   }, token));
 }
 
-async function fetchMostPopularMferTweet() {
-  console.log('Fetching the most popular $mfer tweet from the last 6 hours...');
+async function fetchMostPopularMferTweet(searchTerm = 'mfercoin') {
+  console.log(`Fetching the most popular tweet for "${searchTerm}" from the last 24 hours...`);
 
   // Hard-coded list of author IDs to ignore
   const ignoredAuthorIds = [
@@ -58,7 +58,7 @@ async function fetchMostPopularMferTweet() {
     const now = new Date();
     const sixHoursAgo = new Date(now.getTime() - 24 * 60 * 60 * 1000).toISOString(); // 24 hours
     const baseURL = 'https://api.twitter.com/2/tweets/search/recent';
-    const queryParams = `query=mfercoin&tweet.fields=public_metrics,referenced_tweets,attachments,author_id&user.fields=username,profile_image_url,name&media.fields=url&expansions=attachments.media_keys,author_id&start_time=${sixHoursAgo}&max_results=10`;
+    const queryParams = `query=${encodeURIComponent(searchTerm)}&tweet.fields=public_metrics,referenced_tweets,attachments,author_id&user.fields=username,profile_image_url,name&media.fields=url&expansions=attachments.media_keys,author_id&start_time=${sixHoursAgo}&max_results=10`;
     const searchURL = `${baseURL}?${queryParams}`;
 
     // Use Bearer Token for authorization
@@ -75,7 +75,7 @@ async function fetchMostPopularMferTweet() {
     const users = response.data?.includes?.users;
 
     if (!tweets || tweets.length === 0) {
-      console.log('No tweets found for $mfer in the last 6 hours.');
+      console.log(`No tweets found for "${searchTerm}" in the last 24 hours.`);
       return null;
     }
 
@@ -127,7 +127,7 @@ async function fetchMostPopularMferTweet() {
 
     return mostPopularTweet;
   } catch (error) {
-    console.error('Error fetching $mfer tweets:', error.response ? error.response.data : error.message);
+    console.error(`Error fetching tweets for "${searchTerm}":`, error.response ? error.response.data : error.message);
     return null;
   }
 }
