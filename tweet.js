@@ -844,13 +844,13 @@ const topics = ["mfers", "mfercoin", "mfers", "$mfer", "mfers nfts", "ai", "onch
 
 // Runs every day at 8am Pacific Time
 // mfer of the day
-cron.schedule('0 8 * * *', async () => {
+cron.schedule('0 9 * * *', async () => {
   console.log('Running mfer of the day tweet...');
   await sendMferOfTheDay();
 });
 
 // Runs every day at 7am Pacific Time
-cron.schedule('30 7 * * *', async () => {
+cron.schedule('30 6 * * *', async () => {
   console.log('Running the daily GM tweet...');
   await sendDailyGMTweet();
 });
