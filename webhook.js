@@ -13,11 +13,19 @@ app.use(bodyParser.json());
 // Middleware to check Nifty Island auth
 const checkNiftyAuth = (req, res, next) => {
   const authHeader = req.headers['x-nifty-key'];
+  const expectedKey = process.env.NIFTY_WEBHOOK_KEY;
   
-  if (!authHeader || authHeader !== process.env.NIFTY_WEBHOOK_KEY) {
+  // Debug logging
+  console.log('[Nifty Auth] Received header:', authHeader ? `${authHeader.substring(0, 15)}...` : 'MISSING');
+  console.log('[Nifty Auth] Expected key:', expectedKey ? `${expectedKey.substring(0, 15)}...` : 'NOT SET');
+  console.log('[Nifty Auth] Match:', authHeader === expectedKey);
+  
+  if (!authHeader || authHeader !== expectedKey) {
+    console.log('[Nifty Auth] REJECTED - Unauthorized');
     return res.status(401).json({ error: 'Unauthorized' });
   }
   
+  console.log('[Nifty Auth] APPROVED');
   next();
 };
 
