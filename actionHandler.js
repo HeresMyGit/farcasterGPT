@@ -8,7 +8,7 @@ const { createToken } = require('./zora.js')
 const mintclub = require('./mintClub');
 const degen = require('./degen');
 const personalPrompt = require('./personalPrompt');
-const { getXMTPConversationInfo } = require('./assistant');
+// NOTE: getXMTPConversationInfo is loaded lazily below to avoid circular dependency with assistant.js
 const { getConversationAnalytics, lookupFarcasterUsernames, replaceKnownAddresses, resolveXMTPDisplayName } = require('./xmtpUtils');
 const xmtpContext = require('./xmtpContext');
 const axios = require('axios');

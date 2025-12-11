@@ -11,6 +11,8 @@ pkill -f "node monitor.js" && echo "✅ Stopped monitor.js" || echo "⚠️ No m
 pkill -f "node tweet.js" && echo "✅ Stopped tweet.js" || echo "⚠️ No tweet.js process found"
 pkill -f "node scheduler.js" && echo "✅ Stopped scheduler.js" || echo "⚠️ No scheduler.js process found"
 pkill -f "node xmtpServer.js" && echo "✅ Stopped xmtpServer.js" || echo "⚠️ No xmtpServer.js process found"
+# niftyServer.js was removed - this kills any zombie processes from old deployments
+pkill -f "node niftyServer.js" && echo "✅ Stopped niftyServer.js (zombie cleanup)" || true
 
 # Wait a moment for processes to fully terminate
 echo "Waiting 3 seconds for processes to terminate..."
