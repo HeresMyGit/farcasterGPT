@@ -6,6 +6,7 @@ const fs = require('fs'); // For reading image files
 const path = require('path');
 const FormData = require('form-data');
 const { loadMemedTweets, hasMemedToTweet, saveMemedTweet, saveRepliedTweet } = require('./threadUtils');
+const { openai } = require('./client');
 
 
 // Get your OAuth credentials from environment variables
@@ -109,6 +110,61 @@ async function fetchWithBearerFallback(url, extraHeaders = {}) {
   throw lastError || new Error('All bearer token attempts failed.');
 }
 
+async function selectTweetWithMferGPT(tweets, users, searchTerm) {
+  try {
+    const model = process.env.MFERGPT_MODEL || 'gpt-4o-mini';
+
+    const tweetSummaries = tweets.map(tweet => {
+      const user = users?.find(u => u.id === tweet.author_id);
+      return [
+        `ID: ${tweet.id}`,
+        `Author: ${user?.username || tweet.author_id}`,
+        `Likes: ${tweet.public_metrics?.like_count ?? 0}`,
+        `Text: ${tweet.text}`
+      ].join('\n');
+    }).join('\n\n');
+
+    const response = await openai.chat.completions.create({
+      model,
+      messages: [
+        {
+          role: 'system',
+          content: 'You are MFERGPT, an LLM that selects the best tweet to meme. Choose the tweet that is most aligned with mfers culture, crypto, or AI vibes. Prefer tweets that explicitly mention these themes or strongly imply them.'
+        },
+        {
+          role: 'user',
+          content: `Search term: ${searchTerm}\n\nHere are the candidate tweets:\n${tweetSummaries}\n\nRespond with only the ID of the single best tweet. If none fit, reply NONE.`
+        }
+      ],
+      temperature: 0.2,
+    });
+
+    const choice = response.choices?.[0]?.message?.content?.trim();
+
+    if (!choice || choice.toLowerCase() === 'none') {
+      console.warn('MFERGPT did not select a tweet.');
+      return null;
+    }
+
+    const idMatch = choice.match(/\d+/);
+    if (!idMatch) {
+      console.warn('MFERGPT response did not include a tweet ID:', choice);
+      return null;
+    }
+
+    const selectedTweet = tweets.find(tweet => tweet.id === idMatch[0]);
+
+    if (!selectedTweet) {
+      console.warn('MFERGPT selected an ID that was not in the candidate list:', idMatch[0]);
+    }
+
+    return selectedTweet || null;
+  } catch (error) {
+    console.error('Error selecting tweet with MFERGPT:', error.response ? error.response.data : error.message);
+    return null;
+  }
+}
+
 async function fetchMostPopularMferTweet(searchTerm = 'mfercoin') {
   console.log(`Fetching the most popular tweet for "${searchTerm}" from the last 24 hours...`);
 
@@ -156,32 +212,38 @@ async function fetchMostPopularMferTweet(searchTerm = 'mfercoin') {
     // Log filtered tweets for debugging
     console.log('Unmemed tweets:', JSON.stringify(unmemedTweets, null, 2));
 
-    // Find the most popular tweet based on likes
-    const mostPopularTweet = unmemedTweets.reduce((prev, current) =>
-      (current.public_metrics.like_count > prev.public_metrics.like_count ? current : prev)
-    );
+    // Ask MFERGPT to pick the best tweet with mfer/crypto/AI vibes
+    let selectedTweet = await selectTweetWithMferGPT(unmemedTweets, users, searchTerm);
 
-    if (!mostPopularTweet || !mostPopularTweet.id) {
+    // Fallback to most liked tweet if the LLM cannot pick one
+    if (!selectedTweet) {
+      console.warn('Falling back to most liked tweet because MFERGPT did not select one.');
+      selectedTweet = unmemedTweets.reduce((prev, current) =>
+        (current.public_metrics.like_count > prev.public_metrics.like_count ? current : prev)
+      );
+    }
+
+    if (!selectedTweet || !selectedTweet.id) {
       console.error('No valid tweet to save to memed list.');
       return null;
     }
 
-    // Get the user information for the most popular tweet
-    const authorId = mostPopularTweet.author_id;
+    // Get the user information for the selected tweet
+    const authorId = selectedTweet.author_id;
     const userInfo = users?.find(user => user.id === authorId);
 
-    console.log('Most popular unmemed tweet:', JSON.stringify(mostPopularTweet, null, 2));
+    console.log('Selected tweet:', JSON.stringify(selectedTweet, null, 2));
     console.log('User info for the tweet:', JSON.stringify(userInfo, null, 2));
 
-    // Save the most popular tweet's ID to the memed list
+    // Save the selected tweet's ID to the memed list
     try {
-      await saveMemedTweet(mostPopularTweet.id);
-      console.log(`Saved tweet ID: ${mostPopularTweet.id} to memed list.`);
+      await saveMemedTweet(selectedTweet.id);
+      console.log(`Saved tweet ID: ${selectedTweet.id} to memed list.`);
     } catch (error) {
-      console.error(`Failed to save tweet ID: ${mostPopularTweet.id} to memed list.`, error);
+      console.error(`Failed to save tweet ID: ${selectedTweet.id} to memed list.`, error);
     }
 
-    return mostPopularTweet;
+    return selectedTweet;
   } catch (error) {
     console.error(`Error fetching tweets for "${searchTerm}":`, error.response ? error.response.data : error.message);
     return null;
