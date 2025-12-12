@@ -862,7 +862,7 @@ const searchTerms = [
 ];
 
 // Random search terms for 4th+ slot
-const randomSearchTerms = ['ai', 'crypto', 'nft', 'sartoshi', 'onchain', 'blockchain', 'base'];
+const randomSearchTerms = ['ai agents', 'crypto', 'nft', 'sartoshi', 'onchain', 'blockchain', 'base'];
 
 let searchTermIndex = 0;
 const totalQuoteSlotsPerDay = 6;
