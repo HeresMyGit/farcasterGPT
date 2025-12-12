@@ -16,8 +16,9 @@ async function postNFTToFarcaster(nftJson) {
     // Use Assistant's Beta API to generate the post content
     const userMessageObject = {
       instructions: [
-        "Create a brief and engaging description for the following NFT to post on Farcaster.",
-        "Include the name, artist, and description, and encourage viewers to check it out on Zora (include the URL)."
+        "create a brief and engaging description for the following nft to post on farcaster.",
+        "include the name, artist, and description, and encourage viewers to check it out on zora (include the url).",
+        "keep it lowercase, use shorthand like 'u' instead of 'you', minimal punctuation, casual mfer vibes."
       ],
       data: {
         name: name,
@@ -83,9 +84,9 @@ async function postNFTToTwitter(nftJson) {
     // Use Assistant's Beta API to generate the tweet content
     const userMessageObject = {
       instructions: [
-        "Create a brief and engaging tweet for the following NFT that was just created on your zora mferGPT art contract.",
-        "Include the name, artist, and description, and encourage viewers to mint it on Zora (include the URL).",
-        "no emoji."
+        "create a brief and engaging tweet for the following nft that was just created on ur zora mferGPT art contract.",
+        "include the name, artist, and description, and encourage viewers to mint it on zora (include the url).",
+        "keep it lowercase, use shorthand like 'u' instead of 'you', minimal punctuation, casual mfer vibes."
       ],
       data: {
         name: name,
@@ -107,10 +108,8 @@ async function postNFTToTwitter(nftJson) {
     });
 
     // Run the Assistant on the thread
-    const assistantModel = process.env.ASST_MODEL;
-    console.log(`[TWITTER] Using assistant model: ${assistantModel} for postNFTToTwitter`);
     const run = await openai.beta.threads.runs.createAndPoll(thread.id, {
-      assistant_id: assistantModel,
+      assistant_id: process.env.ASST_MODEL,
       model: process.env.MODEL,
     });
 

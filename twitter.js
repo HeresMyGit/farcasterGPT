@@ -14,8 +14,17 @@ const {
   CONSUMER_SECRET,
   ACCESS_TOKEN,
   ACCESS_TOKEN_SECRET,
-  BEARER_TOKEN
+  BEARER_TOKEN,
+  BEARER_TOKEN_2,
+  BEARER_TOKEN_3
 } = process.env;
+
+// Order of bearer tokens to try for search API calls.
+const bearerTokens = [
+  BEARER_TOKEN,   // primary bearer token
+  BEARER_TOKEN_2, // secondary token
+  BEARER_TOKEN_3  // tertiary token
+].filter(Boolean);
 
 // Initialize OAuth 1.0a with HMAC-SHA1 signature method
 const oauth = OAuth({
@@ -46,6 +55,40 @@ function generateAuthHeader(url, method) {
   }, token));
 }
 
+// Wrapper to fetch with bearer token fallback for Twitter search endpoints.
+async function fetchWithBearerFallback(url, extraHeaders = {}) {
+  if (!bearerTokens.length) {
+    throw new Error('No bearer tokens configured for search requests.');
+  }
+
+  let lastError;
+
+  for (const token of bearerTokens) {
+    try {
+      return await axios.get(url, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json',
+          'User-Agent': 'PostmanRuntime/7.42.0',
+          Accept: '*/*',
+          ...extraHeaders,
+        }
+      });
+    } catch (error) {
+      lastError = error;
+      const status = error?.response?.status;
+      console.warn(`Bearer token attempt failed (${status || error.message}). Trying next token if available.`);
+
+      // For non-transient errors, stop early to avoid masking real issues.
+      if (![401, 403, 429, 500, 503].includes(status)) {
+        break;
+      }
+    }
+  }
+
+  throw lastError || new Error('All bearer token attempts failed.');
+}
+
 async function fetchMostPopularMferTweet(searchTerm = 'mfercoin') {
   console.log(`Fetching the most popular tweet for "${searchTerm}" from the last 24 hours...`);
 
@@ -61,15 +104,8 @@ async function fetchMostPopularMferTweet(searchTerm = 'mfercoin') {
     const queryParams = `query=${encodeURIComponent(searchTerm)}&tweet.fields=public_metrics,referenced_tweets,attachments,author_id&user.fields=username,profile_image_url,name&media.fields=url&expansions=attachments.media_keys,author_id&start_time=${sixHoursAgo}&max_results=10`;
     const searchURL = `${baseURL}?${queryParams}`;
 
-    // Use Bearer Token for authorization
-    const response = await axios.get(searchURL, {
-      headers: {
-        Authorization: `Bearer ${BEARER_TOKEN}`,
-        'Content-Type': 'application/json',
-        'User-Agent': 'PostmanRuntime/7.42.0',
-        'Accept': '*/*',
-      }
-    });
+    // Use Bearer Token for authorization with fallback
+    const response = await fetchWithBearerFallback(searchURL);
 
     const tweets = response.data?.data;
     const users = response.data?.includes?.users;
@@ -141,15 +177,8 @@ async function fetchMostLikedMentions(userId, count = 10) {
     const queryParams = `max_results=${count}&tweet.fields=public_metrics,referenced_tweets,attachments&media.fields=url&expansions=attachments.media_keys&start_time=${sixHoursAgo}`;
     const url = `${baseURL}?${queryParams}`;
 
-    // Use Bearer Token for authorization
-    const response = await axios.get(url, {
-      headers: {
-        Authorization: `Bearer ${BEARER_TOKEN}`,
-        'Content-Type': 'application/json',
-        'User-Agent': 'PostmanRuntime/7.42.0',
-        'Accept': '*/*',
-      }
-    });
+    // Use Bearer Token for authorization with fallback
+    const response = await fetchWithBearerFallback(url);
 
     const mentions = response.data.data;
 

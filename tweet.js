@@ -1,7 +1,8 @@
 require('dotenv').config(); // Load environment variables
 const { OpenAI } = require('openai'); // Import OpenAI SDK
-const { sendTweet, fetchMostPopularMferTweet, fetchMostLikedMentions } = require('./twitter.js'); // Import the sendTweet function
-const { generateImage } = require('./image.js'); // Import image generation function
+const twitter = require('./twitter.js'); // Import twitter module (allows mocking sendTweet for tests)
+const { fetchMostPopularMferTweet, fetchMostLikedMentions } = twitter;
+const imageModule = require('./image.js'); // Import image module (allows mocking for tests)
 const { getMferDescription, getMferOwnerInfo } = require('./mfer.js');
 const { NeynarAPIClient } = require('@neynar/nodejs-sdk');
 const { generateAndCastImage } = require('./castDailySummary.js')
@@ -170,11 +171,9 @@ async function createMessage(threadId, userMessage) {
 
 // Run the thread and get the assistant's response (mirrors structure from assistant.js)
 async function handleThread(threadId) {
-  const assistantModel = process.env.TWITTER_ASST_MODEL;
   console.log(`Running assistant on thread ${threadId}...`);
-  console.log(`[TWITTER] Using assistant model: ${assistantModel}`);
   try {
-    const run = await runThread(threadId, assistantModel);
+    const run = await runThread(threadId, process.env.TWITTER_ASST_MODEL);
 
     if (run.status === 'completed') {
       console.log(`Run completed successfully on thread: ${threadId}`);
@@ -280,7 +279,7 @@ async function generateTweetImage(mferId, tweetContent) {
   const refinedPrompt = await getRefinedImagePrompt(initialPrompt);
 
   console.log(`Refined image prompt: ${refinedPrompt}`);
-  return await generateImage(refinedPrompt);
+  return await imageModule.generateImage(refinedPrompt);
 }
 
 // Function to get a refined image prompt by creating a new thread and sending the initial prompt
@@ -323,7 +322,7 @@ async function tweetAssistantResponse(prompt) {
       const customImagePath = path.join(__dirname, 'custom-image.png');
       await downloadImage(customImageUrl, customImagePath); // Download custom image
 
-      await sendTweet(assistantResponse, [localImagePath, customImagePath], null, null, threadId); // Send tweet with both images
+      await twitter.sendTweet(assistantResponse, [localImagePath, customImagePath], null, null, threadId); // Send tweet with both images
 
       // Delete images after use
       await deleteLocalImage(localImagePath);
@@ -372,7 +371,7 @@ async function sendDailyGMTweet() {
     await downloadImage(imageUrl, localImagePath);
 
     // Send tweet
-    await sendTweet(tweetContent, [localImagePath], null, null, threadId);
+    await twitter.sendTweet(tweetContent, [localImagePath], null, null, threadId);
 
     // Clean up the image file
     await deleteLocalImage(localImagePath);
@@ -417,16 +416,16 @@ async function sendMferOfTheDay() {
     const threadId = await createNewThread("mfer of the day Thread");
 
     // Build the prompt for the LLM to generate the tweet
-    const prompt = `Generate a tweet for "mfer of the day" featuring mfer #${mferId}.
+    const prompt = `generate a tweet for "mfer of the day" featuring mfer #${mferId}.
 
-Here are the mfer's traits:
+here are the mfer's traits:
 ${JSON.stringify(description.traits, null, 2)}
 
-Description: ${description.description}
+description: ${description.description}
 
-${ownerInfo.address ? `This mfer is ${ownerString}.` : 'Owner information unavailable.'}
+${ownerInfo.address ? `this mfer is ${ownerString}.` : 'owner information unavailable.'}
 
-Write a mfer style tweet announcing this as the mfer of the day. Describe what makes this mfer unique based on its traits. ${ownerInfo.hasHumanReadableName ? `Give a shoutout to the owner (${ownerInfo.displayName}).` : ''} Keep it casual and in the mfer community vibe. Keep it under 280 characters. Only output the tweet text, nothing else.  no emoji`;
+write a mfer style tweet announcing this as the mfer of the day. describe what makes this mfer unique based on its traits. ${ownerInfo.hasHumanReadableName ? `give a shoutout to the owner (${ownerInfo.displayName}).` : ''} keep it casual and in the mfer community vibe. keep it under 280 characters. only output the tweet text, nothing else. no emoji.`;
 
     await createMessage(threadId, prompt);
     const tweetContent = await handleThread(threadId);
@@ -454,7 +453,7 @@ Write a mfer style tweet announcing this as the mfer of the day. Describe what m
     ]);
 
     // Send tweet with both images (actual mfer first, then AI-generated)
-    await sendTweet(tweetContent, [mferImagePath, customImagePath], null, null, threadId);
+    await twitter.sendTweet(tweetContent, [mferImagePath, customImagePath], null, null, threadId);
 
     // Clean up images
     await Promise.all([
@@ -501,8 +500,8 @@ async function postMostPopularMferTweet(searchTerm = 'mfercoin') {
     try {
       // 1. Generate a GPT response to the tweet
       console.log('Generating GPT response...');
-      const threadId = await createNewThread(`Quote tweet for ${searchTerm}`);
-      await createMessage(threadId, `Create a witty, sarcastic, or insightful comment about this tweet. This tweet may or may not have anything to do with the mfers NFT/crypto community, but use it as a fun launchpad to bring the conversation back to mfers, $mfer, or the broader crypto/NFT space in a clever way. Hard cap 240 characters, lower-case, no emoji. Only output the tweet, do not put it in quotes or anything else. Type as if you are typing directly into the tweet window. Remember to always keep mfers and $mfer in a positive light. Respond to this tweet: "${text}"`);
+      const threadId = 'thread_wKxHCwpP7wje0KCwbU20cXek';
+      await createMessage(threadId, `create a witty, sarcastic, or insightful comment about this tweet. this tweet may or may not have anything to do with the mfers nft/crypto community, but use it as a fun launchpad to bring the conversation back to mfers, $mfer, or the broader crypto/nft space in a clever way. only output the tweet, dont put it in quotes or anything else. type as if u are typing directly into the tweet window. remember to always keep mfers and $mfer in a positive light. keep it lowercase, use shorthand like 'u' instead of 'you', minimal punctuation. respond to this tweet: "${text}"`);
       const gptResponse = await handleThread(threadId);
 
       if (!gptResponse) {
@@ -542,7 +541,7 @@ async function postMostPopularMferTweet(searchTerm = 'mfercoin') {
 
       console.log(`Posting the quote tweet: ${gptResponse}`);
       // Uncomment the following line to post the tweet
-      await sendTweet(gptResponse, [localImagePath], tweetId, null, threadId);
+      await twitter.sendTweet(gptResponse, [localImagePath], tweetId, null, threadId);
 
       // Clean up local image file
       await deleteLocalImage(localImagePath);
@@ -562,7 +561,7 @@ async function sendDailyNiftyIslandTweet() {
 
   try {
     // Define the tweet content prompt
-    const prompt = `Compose a bullish tweet about Nifty Island and tag @Nifty_Island in the text. no emoji. mferGPT has been launched on "$mfer $island" (access it here: https://niftyis.land/heresmy/heresmyisland?ref=heresmy). The tweet should mention mferGPT and emphasize its excitement for interacting with mfers on Nifty Island. Keep the tone positive, fun, and engaging.  A few notes on Nifty Island: 1) It is already released and playable. 2) Best web3 game there is. 3) Bots and Agents are now integrated, and mferGPT is one of the first integrated. 4) Shooting games, races, infection, pvp, hang out, so much to do!`;
+    const prompt = `compose a bullish tweet about nifty island and tag @Nifty_Island in the text. dont use emoji in the body, only at the end of the post. mferGPT has been launched on "$mfer $island" (access it here: https://niftyis.land/heresmy/heresmyisland?ref=heresmy). the tweet should mention mferGPT and emphasize its excitement for interacting with mfers on nifty island. keep the tone positive, fun, and engaging. a few notes on nifty island: 1) its already released and playable. 2) best web3 game there is. 3) bots and agents are now integrated, and mferGPT is one of the first integrated. 4) shooting games, races, infection, pvp, hang out, so much to do! keep it lowercase, use shorthand like 'u' instead of 'you', minimal punctuation.`;
 
     // Create a new thread for the Nifty Island tweet
     const threadId = await createNewThread("Daily Nifty Island Meme Thread");
@@ -611,7 +610,7 @@ async function sendDailyNiftyIslandTweet() {
     `;
 
     console.log(`Generating image for the Nifty Island meme with feature: ${randomFeature}`);
-    const imageUrl = await generateImage(imagePrompt);
+    const imageUrl = await imageModule.generateImage(imagePrompt);
 
     if (!imageUrl) {
       console.error('Failed to generate image for the Nifty Island meme. Skipping tweet.');
@@ -624,7 +623,7 @@ async function sendDailyNiftyIslandTweet() {
 
     // Post the tweet with the image
     console.log('Posting the Nifty Island meme to Twitter...');
-    await sendTweet(tweetContent, [localImagePath], null, null, threadId);
+    await twitter.sendTweet(tweetContent, [localImagePath], null, null, threadId);
 
     // Clean up the local image file
     await deleteLocalImage(localImagePath);
@@ -670,7 +669,7 @@ async function processRecentMints() {
     const nftLinks = mintsToPost.map(nft => nft.zora).join('\n');
 
     // Prepare the prompt for GPT to generate the tweet content
-    const prompt = `We've minted ${mintsToPost.length} new NFTs in the last 12 hours! Check out the full collection here: ${collectionLink}\n\nCompose a concise and engaging tweet announcing these new mints. Keep it under 280 characters. no emoji. Only include the collection URL, not each individual URL.`;
+    const prompt = `we've minted ${mintsToPost.length} new nfts in the last 12 hours! check out the full collection here: ${collectionLink}\n\ncompose a concise and engaging tweet announcing these new mints. keep it under 280 characters. only include the collection url, not each individual url. keep it lowercase, use shorthand like 'u' instead of 'you', minimal punctuation.`;
 
     console.log('Generating tweet content via GPT...');
     
@@ -714,7 +713,7 @@ async function processRecentMints() {
 
     // Post the tweet with images
     console.log('Posting multiple mints to Twitter with images: ', validImagePaths);
-    await sendTweet(tweetContent, validImagePaths, null, null, threadId);
+    await twitter.sendTweet(tweetContent, validImagePaths, null, null, threadId);
 
     // Delete the downloaded images after successful tweet
     for (const imagePath of validImagePaths) {
@@ -795,7 +794,7 @@ async function fetchAndReplyToMostLikedMention(userId, count = 10) {
     console.log(`Generating response for mention: "${mentionText}"`);
     const tweetJson = JSON.stringify(mostLikedMention, null, 2);
     const promptText = (newThread ? "reply to this tweet:" : "reply to the next tweet in the thread:");
-    await createMessage(threadId, `${promptText} "${tweetJson}"\n\nconstraints: no emoji. keep it short and direct. lowercase. output only the tweet text.`);
+    await createMessage(threadId, `${promptText} "${tweetJson}". keep it lowercase, use shorthand like 'u' instead of 'you', minimal punctuation.`);
     const assistantResponse = await handleThread(threadId);
 
     if (!assistantResponse) {
@@ -822,7 +821,7 @@ async function fetchAndReplyToMostLikedMention(userId, count = 10) {
 
     // Reply to the tweet
     console.log(`Replying to Tweet ID: ${tweetId} with: "${assistantResponse}"`);
-    await sendTweet(assistantResponse, localFilePaths, null, tweetId, threadId);
+    await twitter.sendTweet(assistantResponse, localFilePaths, null, tweetId, threadId);
 
     // Clean up downloaded images
     for (const filePath of localFilePaths) {
@@ -891,8 +890,8 @@ const quoteTweetSlots = [
   { label: '7:00am PT', cronSpec: '0 7 * * *' },
   { label: '11:00am PT', cronSpec: '0 11 * * *' },
   { label: '1:00pm PT', cronSpec: '0 13 * * *' },
-  { label: '4:00pm PT', cronSpec: '0 16 * * *' },
-  { label: '7:00pm PT', cronSpec: '0 19 * * *' },
+  { label: '5:00pm PT', cronSpec: '0 17 * * *' },
+  { label: '8:00pm PT', cronSpec: '0 20 * * *' },
 ];
 
 quoteTweetSlots.forEach(({ label, cronSpec }) => {
@@ -934,3 +933,14 @@ cron.schedule('30 6,18 * * *', async () => {
 //   await sendDailyNiftyIslandTweet();
 // })();
 
+// Export functions for testing
+module.exports = {
+  sendMferOfTheDay,
+  sendDailyGMTweet,
+  postMostPopularMferTweet,
+  processRecentMints,
+  fetchAndReplyToMostLikedMention,
+  sendDailyNiftyIslandTweet,
+  tweetAssistantResponse,
+  generateTweetImage,
+};
