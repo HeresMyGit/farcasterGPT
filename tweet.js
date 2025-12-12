@@ -890,7 +890,7 @@ const quoteTweetSlots = [
   { label: '7:00am PT', cronSpec: '0 7 * * *' },
   { label: '11:00am PT', cronSpec: '0 11 * * *' },
   { label: '1:00pm PT', cronSpec: '0 13 * * *' },
-  { label: '5:00pm PT', cronSpec: '0 17 * * *' },
+  { label: '5:05pm PT', cronSpec: '5 17 * * *' },
   { label: '8:00pm PT', cronSpec: '0 20 * * *' },
 ];
 

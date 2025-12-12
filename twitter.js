@@ -65,7 +65,7 @@ async function fetchWithBearerFallback(url, extraHeaders = {}) {
 
   for (const token of bearerTokens) {
     try {
-      return await axios.get(url, {
+      const response = await axios.get(url, {
         headers: {
           Authorization: `Bearer ${token}`,
           'Content-Type': 'application/json',
@@ -74,9 +74,29 @@ async function fetchWithBearerFallback(url, extraHeaders = {}) {
           ...extraHeaders,
         }
       });
+
+      // Check for usage cap errors in successful responses
+      const responseData = response.data;
+      if (responseData?.title === 'UsageCapExceeded' || 
+          responseData?.type === 'https://api.twitter.com/2/problems/usage-capped') {
+        console.warn(`Bearer token usage cap exceeded. Trying next token if available.`);
+        lastError = new Error('UsageCapExceeded: ' + (responseData?.detail || 'Monthly product cap'));
+        continue;
+      }
+
+      return response;
     } catch (error) {
       lastError = error;
       const status = error?.response?.status;
+      const errorData = error?.response?.data;
+      
+      // Check for usage cap in error response
+      if (errorData?.title === 'UsageCapExceeded' || 
+          errorData?.type === 'https://api.twitter.com/2/problems/usage-capped') {
+        console.warn(`Bearer token usage cap exceeded. Trying next token if available.`);
+        continue;
+      }
+
       console.warn(`Bearer token attempt failed (${status || error.message}). Trying next token if available.`);
 
       // For non-transient errors, stop early to avoid masking real issues.
