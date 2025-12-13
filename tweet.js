@@ -15,6 +15,52 @@ const fs = require('fs');
 const path = require('path');
 const axios = require('axios');
 
+// Safe JSON parsing helper function
+function safeJSONParse(data, filepath, defaultValue = {}) {
+  try {
+    return JSON.parse(data);
+  } catch (error) {
+    console.error(`❌ Error parsing JSON file ${filepath}:`, error.message);
+    console.log(`🔧 Creating backup and resetting ${path.basename(filepath)}...`);
+
+    // Create backup of corrupted file
+    const backupFile = filepath + '.backup.' + Date.now();
+    try {
+      fs.copyFileSync(filepath, backupFile);
+      console.log(`📁 Backup created: ${backupFile}`);
+    } catch (backupError) {
+      console.error('Failed to create backup:', backupError.message);
+    }
+
+    // Reset to default value
+    try {
+      fs.writeFileSync(filepath, JSON.stringify(defaultValue, null, 2));
+      console.log(`✅ ${path.basename(filepath)} reset successfully`);
+    } catch (writeError) {
+      console.error('Failed to reset file:', writeError.message);
+    }
+
+    return defaultValue;
+  }
+}
+
+const QUOTE_TWEET_INDEX_FILE = path.resolve(__dirname, '../farcasterGPT-Data/quoteTweetIndex.txt');
+
+// Load quote tweet search term index from file
+function loadQuoteTweetIndex() {
+  if (fs.existsSync(QUOTE_TWEET_INDEX_FILE)) {
+    const data = fs.readFileSync(QUOTE_TWEET_INDEX_FILE, 'utf-8').trim();
+    const index = parseInt(data, 10);
+    return isNaN(index) ? 0 : index;
+  }
+  return 0;
+}
+
+// Save quote tweet search term index to file
+function saveQuoteTweetIndex(index) {
+  fs.writeFileSync(QUOTE_TWEET_INDEX_FILE, index.toString());
+}
+
 // Global array of style options for image generation
 const styleOptions = [
   "Photorealistic, lifelike humans",
@@ -864,7 +910,7 @@ const searchTerms = [
 // Random search terms for 4th+ slot
 const randomSearchTerms = ['ai agents', 'crypto', 'nft', 'sartoshi', 'onchain', 'blockchain', 'base'];
 
-let searchTermIndex = 0;
+let searchTermIndex = loadQuoteTweetIndex();
 const totalQuoteSlotsPerDay = 6;
 
 async function runScheduledQuoteTweet(slotLabel = '') {
@@ -881,6 +927,7 @@ async function runScheduledQuoteTweet(slotLabel = '') {
 
   // Increment and wrap the index (cycle through the first 3 fixed, then randoms)
   searchTermIndex = (searchTermIndex + 1) % totalQuoteSlotsPerDay;
+  saveQuoteTweetIndex(searchTermIndex);
 }
 
 // Quote tweet schedule (Pacific Time):
