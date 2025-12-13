@@ -11,6 +11,7 @@ pkill -f "node monitor.js" && echo "✅ Stopped monitor.js" || echo "⚠️ No m
 pkill -f "node tweet.js" && echo "✅ Stopped tweet.js" || echo "⚠️ No tweet.js process found"
 pkill -f "node scheduler.js" && echo "✅ Stopped scheduler.js" || echo "⚠️ No scheduler.js process found"
 pkill -f "node xmtp.js" && echo "✅ Stopped xmtp.js" || echo "⚠️ No xmtp.js process found"
+pkill -f "node webServer.js" && echo "✅ Stopped webServer.js" || echo "⚠️ No webServer.js process found"
 # niftyServer.js was removed - this kills any zombie processes from old deployments
 pkill -f "node niftyServer.js" && echo "✅ Stopped niftyServer.js (zombie cleanup)" || true
 
@@ -42,6 +43,10 @@ nohup node xmtp.js > outputXmtp.log 2>&1 &
 XMTP_PID=$!
 echo "✅ XMTP Server (xmtp.js): PID $XMTP_PID"
 
+nohup node webServer.js > outputWeb.log 2>&1 &
+WEB_PID=$!
+echo "✅ Website (webServer.js): PID $WEB_PID"
+
 echo ""
 echo "🎉 All services started successfully!"
 echo ""
@@ -51,6 +56,7 @@ echo "  Monitor:    PID $MONITOR_PID"
 echo "  Twitter:    PID $TWEET_PID"
 echo "  Scheduler:  PID $SCHEDULER_PID"
 echo "  XMTP:       PID $XMTP_PID"
+echo "  Website:    PID $WEB_PID"
 echo ""
 echo "📝 Log files:"
 echo "  Main:       tail -f output.log"
@@ -58,6 +64,7 @@ echo "  Monitor:    tail -f outputMonitor.log"
 echo "  Twitter:    tail -f outputTweet.log"
 echo "  Scheduler:  tail -f outputScheduler.log"
 echo "  XMTP:       tail -f outputXmtp.log"
+echo "  Website:    tail -f outputWeb.log"
 echo ""
 echo "🔍 Check status: ps aux | grep node"
 

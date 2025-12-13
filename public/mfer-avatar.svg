@@ -1,0 +1,23 @@
+<svg width="80" height="80" viewBox="0 0 80 80" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <circle cx="40" cy="40" r="40" fill="#FFB671"/>
+  <!-- Headphones band -->
+  <path d="M18 32C18 20 28 12 40 12C52 12 62 20 62 32" stroke="#333" stroke-width="4" fill="none"/>
+  <!-- Headphone cups -->
+  <rect x="10" y="28" width="14" height="18" rx="4" fill="#333"/>
+  <rect x="56" y="28" width="14" height="18" rx="4" fill="#333"/>
+  <!-- Face -->
+  <circle cx="40" cy="42" r="22" fill="#FFEDD8"/>
+  <!-- Pixel sunglasses -->
+  <rect x="22" y="36" width="14" height="10" fill="#333"/>
+  <rect x="44" y="36" width="14" height="10" fill="#333"/>
+  <rect x="36" y="38" width="8" height="6" fill="#333"/>
+  <!-- White reflection on glasses -->
+  <rect x="24" y="38" width="4" height="4" fill="#FFF" opacity="0.3"/>
+  <rect x="46" y="38" width="4" height="4" fill="#FFF" opacity="0.3"/>
+  <!-- Smile -->
+  <path d="M32 54Q40 60 48 54" stroke="#333" stroke-width="2" fill="none" stroke-linecap="round"/>
+  <!-- Cigarette -->
+  <rect x="48" y="52" width="22" height="4" fill="#FFF" stroke="#DDD" stroke-width="0.5"/>
+  <rect x="66" y="52" width="4" height="4" fill="#FF6B35"/>
+</svg>
+
