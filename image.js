@@ -11,7 +11,7 @@ async function generateImage(prompt) {
       prompt: prompt,
       n: 1,
       size: "1024x1024",
-      model: "gpt-image-1.5",
+      model: "gpt-image-1.5-2025-12-16",
     });
 
     const imageBase64 = imageResponse.data[0].b64_json;
