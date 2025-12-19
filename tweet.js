@@ -471,7 +471,7 @@ description: ${description.description}
 
 ${ownerInfo.address ? `this mfer is ${ownerString}.` : 'owner information unavailable.'}
 
-write a mfer style tweet announcing this as the mfer of the day. describe what makes this mfer unique based on its traits. ${ownerInfo.hasHumanReadableName ? `give a shoutout to the owner (${ownerInfo.displayName}).` : ''} keep it casual and in the mfer community vibe. keep it under 280 characters. only output the tweet text, nothing else. no emoji.`;
+IMPORTANT: write a mfer style tweet announcing this as the mfer of the day. you MUST include the owner information (${ownerString}) in the tweet. describe what makes this mfer unique based on its traits and always mention who owns it${ownerInfo.hasHumanReadableName ? ` - give a shoutout to ${ownerInfo.displayName}` : ' by including their wallet address'}. keep it casual and in the mfer community vibe. keep it around 280 characters but prioritize including the owner info over the character limit. only output the tweet text, nothing else. no emoji.`;
 
     await createMessage(threadId, prompt);
     const tweetContent = await handleThread(threadId);
